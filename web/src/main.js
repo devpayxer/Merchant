@@ -19,6 +19,10 @@ const state = {
   expanded: {},            // vin -> true (carro expandido en "hoy")
   filterHoy: "",           // filtro en vivo pestaña "En yarda"
   filterTop: "",           // filtro en vivo pestaña "Top"
+  user: null,              // sesión del dueño (Supabase Auth)
+  inv: null,               // filas de my_inventory
+  authMsg: "",
+  pulled: new Set(),       // feedback visual de "la saqué" en esta sesión
   updatedAt: null,
   error: null,
 };
@@ -91,6 +95,15 @@ async function loadYardCars() {
   state.yardCars = data;
 }
 
+async function loadInv() {
+  const { data, error } = await db
+    .from("my_inventory")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  state.inv = data;
+}
+
 async function loadTop() {
   const { data, error } = await db
     .from("hot_list")
@@ -137,10 +150,84 @@ async function switchTab(tab) {
       await loadYardCars();
       render();
     }
+    if (tab === "mio" && state.user && state.inv === null) {
+      await loadInv();
+      render();
+    }
   } catch (e) {
     state.error = "No pude cargar los datos. Revisa tu señal.";
     render();
   }
+}
+
+// ---------- Inventario propio ----------
+async function login(email, password) {
+  state.authMsg = "";
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  if (error) {
+    state.authMsg = "Correo o contraseña incorrectos.";
+    render();
+  }
+}
+
+async function logout() {
+  await db.auth.signOut();
+  state.inv = null;
+  render();
+}
+
+async function pullPart(payload) {
+  const costoStr = prompt(`¿Cuánto pagaste por "${payload.pieza}" en la yarda? (deja vacío si no sabes)`);
+  if (costoStr === null) return; // canceló
+  const costo = costoStr.trim() === "" ? null : Number(costoStr.replace(/[^0-9.]/g, ""));
+  const { error } = await db.from("my_inventory").insert({
+    vehiculo: payload.vehiculo,
+    pieza: payload.pieza,
+    vin: payload.vin ?? null,
+    fila: payload.fila ?? null,
+    costo: Number.isFinite(costo) ? costo : null,
+    precio_mercado: payload.precio ?? null,
+  });
+  if (error) {
+    state.error = "No pude guardar. ¿Sigues con sesión iniciada?";
+  } else {
+    state.pulled.add(payload.key);
+    state.inv = null; // recargar la próxima vez
+  }
+  render();
+}
+
+async function advanceEstado(id, estado) {
+  const patch = { updated_at: new Date().toISOString() };
+  if (estado === "bodega") {
+    const p = prompt("¿En cuánto la listaste en eBay? (opcional)");
+    if (p === null) return;
+    patch.estado = "listada";
+    const n = Number(p.replace(/[^0-9.]/g, ""));
+    if (p.trim() && Number.isFinite(n)) patch.precio_listado = n;
+  } else if (estado === "listada") {
+    const p = prompt("¿En cuánto se vendió?");
+    if (p === null) return;
+    patch.estado = "vendida";
+    const n = Number(p.replace(/[^0-9.]/g, ""));
+    if (p.trim() && Number.isFinite(n)) patch.precio_venta = n;
+  } else if (estado === "vendida") {
+    patch.estado = "enviada";
+  } else {
+    return;
+  }
+  const { error } = await db.from("my_inventory").update(patch).eq("id", id);
+  if (error) state.error = "No pude actualizar.";
+  else await loadInv().catch(() => {});
+  render();
+}
+
+async function deleteInv(id) {
+  if (!confirm("¿Borrar esta pieza de tu inventario?")) return;
+  const { error } = await db.from("my_inventory").delete().eq("id", id);
+  if (error) state.error = "No pude borrar.";
+  else await loadInv().catch(() => {});
+  render();
 }
 
 async function toggleCar(vin, label) {
@@ -157,10 +244,27 @@ async function toggleCar(vin, label) {
 }
 
 // ---------- Render ----------
-function rowHTML(r, showVehiculo = false) {
+function rowHTML(r, showVehiculo = false, car = null) {
   const link = r.ebay_url
     ? ` · <a href="${r.ebay_url}" target="_blank" rel="noopener">ver en eBay ↗</a>`
     : "";
+  let pullBtn = "";
+  if (state.user) {
+    const key = `${r.vehiculo}|${r.pieza}|${car?.vin ?? ""}`;
+    if (state.pulled.has(key)) {
+      pullBtn = `<div class="pull-done">✓ En tu inventario</div>`;
+    } else {
+      const payload = encodeURIComponent(JSON.stringify({
+        key,
+        vehiculo: r.vehiculo,
+        pieza: r.pieza,
+        precio: r.precio_objetivo ?? null,
+        vin: car?.vin ?? null,
+        fila: car?.row_number ?? null,
+      }));
+      pullBtn = `<button class="pull-btn" data-pull="${payload}">＋ La saqué</button>`;
+    }
+  }
   return `
     <div class="row">
       ${r.foto ? `<img class="thumb" src="${r.foto}" loading="lazy" alt="">` : ""}
@@ -171,6 +275,7 @@ function rowHTML(r, showVehiculo = false) {
           · ${r.vendidos_30d ?? 0} vendidos/30d
           · ${r.competencia ?? 0} compitiendo${link}
         </div>
+        ${pullBtn}
       </div>
       <div class="precio">${money(r.precio_objetivo)}</div>
     </div>`;
@@ -274,7 +379,7 @@ function hoyHTML() {
         const rows = state.lists[c.vehiculo];
         if (rows === undefined) detail = `<div class="loading">Cargando piezas…</div>`;
         else if (rows.length === 0) detail = `<div class="empty">Sin datos de piezas</div>`;
-        else detail = rows.map((r) => rowHTML(r)).join("");
+        else detail = rows.map((r) => rowHTML(r, false, c)).join("");
       }
       return `
         <div class="rows" style="margin-bottom:10px; border-radius:12px;">
@@ -317,6 +422,73 @@ function topHTML() {
     </section>`;
 }
 
+const ESTADOS = {
+  bodega:  { label: "🏠 En bodega", next: "📤 Ya la listé" },
+  listada: { label: "📤 Listada",   next: "💰 Se vendió" },
+  vendida: { label: "💰 Vendida",   next: "📦 Ya la envié" },
+  enviada: { label: "✅ Enviada",   next: null },
+};
+
+function mioHTML() {
+  if (!state.user) {
+    return `
+      <section class="vehicle-block">
+        <h2>📦 Mi inventario</h2>
+        <div class="rows" style="padding:16px;">
+          <p style="margin-bottom:12px;">Inicia sesión para manejar tus piezas.</p>
+          <input id="auth-email" type="email" class="auth-input" value="a.ledesma@payxer.com" autocomplete="username" />
+          <input id="auth-pass" type="password" class="auth-input" placeholder="Contraseña" autocomplete="current-password" />
+          <button id="auth-btn" class="big-btn">Entrar</button>
+          ${state.authMsg ? `<p class="error" style="padding:10px 0;">${state.authMsg}</p>` : ""}
+        </div>
+      </section>`;
+  }
+  if (state.inv === null) return `<div class="loading">Cargando tu inventario…</div>`;
+
+  const inv = state.inv;
+  const n = (est) => inv.filter((i) => i.estado === est).length;
+  const invertido = inv.reduce((s, i) => s + Number(i.costo ?? 0), 0);
+  const vendidoTotal = inv
+    .filter((i) => i.estado === "vendida" || i.estado === "enviada")
+    .reduce((s, i) => s + Number(i.precio_venta ?? 0), 0);
+  const ganancia = inv
+    .filter((i) => i.estado === "vendida" || i.estado === "enviada")
+    .reduce((s, i) => s + Number(i.precio_venta ?? 0) * 0.85 - Number(i.costo ?? 0), 0);
+
+  const items = inv
+    .map((i) => {
+      const e = ESTADOS[i.estado] ?? ESTADOS.bodega;
+      return `
+      <div class="row">
+        <div class="rowbody">
+          <div class="pieza">${i.pieza} <span class="meta">· ${i.vehiculo}</span></div>
+          <div class="meta">
+            ${e.label}
+            ${i.fila ? ` · Fila ${i.fila}` : ""}
+            ${i.costo != null ? ` · costo ${money(i.costo)}` : ""}
+            ${i.precio_venta != null ? ` · vendida en ${money(i.precio_venta)}` : i.precio_listado != null ? ` · listada en ${money(i.precio_listado)}` : i.precio_mercado != null ? ` · mercado ${money(i.precio_mercado)}` : ""}
+          </div>
+          <div class="inv-actions">
+            ${e.next ? `<button class="estado-btn" data-avanza="${i.id}" data-estado="${i.estado}">${e.next}</button>` : ""}
+            <button class="del-btn" data-borra="${i.id}">✕</button>
+          </div>
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  return `
+    <div class="summary">
+      <div><b>${n("bodega")}</b> en bodega · <b>${n("listada")}</b> listadas · <b>${n("vendida") + n("enviada")}</b> vendidas</div>
+      <div>Invertido: <b>${money(invertido)}</b> · Vendido: <b>${money(vendidoTotal)}</b> · Ganancia est.: <b class="${ganancia >= 0 ? "gain" : "loss"}">${money(Math.round(ganancia))}</b></div>
+    </div>
+    <section class="vehicle-block">
+      <h2>📦 Mi inventario (${inv.length})</h2>
+      <div class="rows">${items || `<div class="empty">Aún no has sacado piezas.<br>Busca un carro y toca "＋ La saqué".</div>`}</div>
+    </section>
+    <div class="hint">La ganancia estimada descuenta ~15% de comisión de eBay.<br><button id="auth-out" class="linklike">Cerrar sesión</button></div>`;
+}
+
 function render() {
   app.innerHTML = `
     <header>
@@ -324,11 +496,12 @@ function render() {
       <div id="updated">${hoursAgoText(state.updatedAt)}</div>
     </header>
     ${state.error ? `<div class="error">${state.error}</div>` : ""}
-    ${state.tab === "yarda" ? yardaHTML() : state.tab === "hoy" ? hoyHTML() : topHTML()}
+    ${state.tab === "yarda" ? yardaHTML() : state.tab === "hoy" ? hoyHTML() : state.tab === "top" ? topHTML() : mioHTML()}
     <nav>
       <button class="${state.tab === "yarda" ? "active" : ""}" data-tab="yarda">🚗 Buscar</button>
-      <button class="${state.tab === "hoy" ? "active" : ""}" data-tab="hoy">📍 En yarda</button>
+      <button class="${state.tab === "hoy" ? "active" : ""}" data-tab="hoy">📍 Yarda</button>
       <button class="${state.tab === "top" ? "active" : ""}" data-tab="top">🔥 Top</button>
+      <button class="${state.tab === "mio" ? "active" : ""}" data-tab="mio">📦 Mío</button>
     </nav>`;
 
   app.querySelectorAll("[data-tab]").forEach((b) =>
@@ -356,11 +529,43 @@ function render() {
   }
   bindFilter("filter-hoy", "filterHoy");
   bindFilter("filter-top", "filterTop");
+
+  app.querySelectorAll("[data-pull]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      pullPart(JSON.parse(decodeURIComponent(b.dataset.pull)));
+    }),
+  );
+  app.querySelectorAll("[data-avanza]").forEach((b) =>
+    b.addEventListener("click", () => advanceEstado(Number(b.dataset.avanza), b.dataset.estado)),
+  );
+  app.querySelectorAll("[data-borra]").forEach((b) =>
+    b.addEventListener("click", () => deleteInv(Number(b.dataset.borra))),
+  );
+  const authBtn = app.querySelector("#auth-btn");
+  if (authBtn) {
+    authBtn.addEventListener("click", () =>
+      login(app.querySelector("#auth-email").value.trim(), app.querySelector("#auth-pass").value),
+    );
+  }
+  const authOut = app.querySelector("#auth-out");
+  if (authOut) authOut.addEventListener("click", logout);
 }
 
 // ---------- Arranque ----------
+db.auth.onAuthStateChange((_event, session) => {
+  state.user = session?.user ?? null;
+  if (!state.user) state.inv = null;
+  render();
+  if (state.user && state.tab === "mio" && state.inv === null) {
+    loadInv().then(render).catch(() => {});
+  }
+});
+
 (async () => {
   render();
+  const { data } = await db.auth.getSession().catch(() => ({ data: {} }));
+  state.user = data?.session?.user ?? null;
   try {
     await Promise.all([loadVehicles(), loadUpdatedAt()]);
   } catch (e) {

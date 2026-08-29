@@ -186,3 +186,84 @@ nav button.active {
 .error { color: var(--red); font-weight: 700; }
 
 .hint { padding: 24px 20px; text-align: center; font-size: 18px; color: var(--ink-soft); }
+
+/* ---------- Mi inventario ---------- */
+.pull-btn {
+  margin-top: 8px;
+  min-height: 44px;
+  padding: 8px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.pull-done { margin-top: 8px; font-size: 16px; font-weight: 700; color: var(--green); }
+
+.inv-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+.estado-btn {
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--green);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.del-btn {
+  min-height: 44px;
+  min-width: 44px;
+  font-size: 18px;
+  color: var(--red);
+  background: none;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.summary {
+  margin: 14px 14px 0;
+  background: var(--paper);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 17px;
+  display: grid;
+  gap: 6px;
+}
+.summary .gain { color: var(--green); }
+.summary .loss { color: var(--red); }
+
+.auth-input {
+  width: 100%;
+  min-height: 54px;
+  font-size: 19px;
+  padding: 10px 14px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  background: var(--paper);
+}
+.big-btn {
+  width: 100%;
+  min-height: 56px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.linklike {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 44px;
+}
