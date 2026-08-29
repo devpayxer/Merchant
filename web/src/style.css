@@ -1,0 +1,178 @@
+/* Mobile-first, uso con guantes y sol de frente:
+   texto grande, alto contraste, targets de 48px+ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink: #111827;
+  --ink-soft: #4b5563;
+  --paper: #ffffff;
+  --ground: #f3f4f6;
+  --line: #d1d5db;
+  --accent: #1d4ed8;
+  --green: #15803d;
+  --amber: #b45309;
+  --red: #b91c1c;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--ground);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+#app { max-width: 640px; margin: 0 auto; padding-bottom: 90px; }
+
+/* ---------- Header ---------- */
+header {
+  background: var(--ink);
+  color: #fff;
+  padding: 14px 16px 10px;
+}
+header h1 { font-size: 22px; font-weight: 800; }
+#updated {
+  font-size: 14px;
+  color: #d1d5db;
+  margin-top: 2px;
+}
+
+/* ---------- Tabs (abajo, alcanzables con pulgar) ---------- */
+nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  background: var(--paper);
+  border-top: 2px solid var(--line);
+  z-index: 20;
+}
+nav button {
+  flex: 1;
+  min-height: 64px;
+  font-size: 19px;
+  font-weight: 700;
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+nav button.active {
+  color: var(--accent);
+  box-shadow: inset 0 4px 0 var(--accent);
+  background: #eff6ff;
+}
+
+/* ---------- Buscador ---------- */
+.search-box { padding: 14px 14px 0; position: relative; }
+.search-box input {
+  width: 100%;
+  min-height: 58px;
+  font-size: 20px;
+  padding: 10px 14px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.search-box input:focus { outline: 3px solid var(--accent); }
+
+.suggestions {
+  position: absolute;
+  left: 14px; right: 14px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 8px 16px rgba(0,0,0,.2);
+}
+.suggestions button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+  font-size: 19px;
+  font-weight: 600;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  cursor: pointer;
+  min-height: 52px;
+}
+.suggestions button:active { background: #dbeafe; }
+
+/* ---------- Chips de vehículos elegidos ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px 0; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  padding: 10px 8px 10px 14px;
+  border-radius: 999px;
+  border: none;
+  min-height: 48px;
+  cursor: pointer;
+}
+.chip span.x {
+  background: rgba(255,255,255,.25);
+  border-radius: 50%;
+  width: 30px; height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+/* ---------- Lista por vehículo ---------- */
+.vehicle-block { margin: 14px 14px 0; }
+.vehicle-block h2 {
+  font-size: 19px;
+  font-weight: 800;
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 12px 12px 0 0;
+}
+.rows { background: var(--paper); border-radius: 0 0 12px 12px; overflow: hidden; }
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+.row:last-child { border-bottom: none; }
+.row .pieza { font-size: 19px; font-weight: 700; }
+.row .precio {
+  grid-row: span 2;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--green);
+  text-align: right;
+  white-space: nowrap;
+}
+.row .meta { font-size: 15px; color: var(--ink-soft); }
+.row .sem { font-weight: 700; }
+.sem-hot { color: var(--red); }
+.sem-warn { color: var(--amber); }
+.sem-dead { color: var(--ink-soft); }
+
+.empty, .loading, .error {
+  padding: 40px 20px;
+  text-align: center;
+  font-size: 19px;
+  color: var(--ink-soft);
+}
+.error { color: var(--red); font-weight: 700; }
+
+.hint { padding: 24px 20px; text-align: center; font-size: 18px; color: var(--ink-soft); }
