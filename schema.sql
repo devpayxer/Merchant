@@ -102,10 +102,10 @@ create view hot_list as
 select
   vehiculo, pieza,
   vendidos_30d,
-  round(precio_mediano, 0)                    as precio_objetivo,
+  round(precio_mediano::numeric, 0)           as precio_objetivo,
   competencia,
   ship_class,
-  round((vendidos_30d * coalesce(precio_mediano, 0)) / greatest(pull_minutes, 1), 1) as score,
+  round(((vendidos_30d * coalesce(precio_mediano, 0)) / greatest(pull_minutes, 1))::numeric, 1) as score,
   case
     when vendidos_30d >= 4 and competencia < 30 then '🔥'
     when competencia >= 60                       then '⚠️ mucha competencia'
