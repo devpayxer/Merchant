@@ -9,12 +9,14 @@ const SUPABASE_ANON_KEY =
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const state = {
-  tab: "yarda",            // "yarda" | "top"
+  tab: "yarda",            // "yarda" | "hoy" | "top"
   vehicles: [],            // [{id, label}]
   selected: [],            // labels elegidos
   query: "",
   lists: {},               // label -> filas de hot_list
   top: null,               // filas del top general
+  yardCars: null,          // carros de la yarda que están en el radar
+  expanded: {},            // vin -> true (carro expandido en "hoy")
   updatedAt: null,
   error: null,
 };
@@ -77,6 +79,16 @@ async function loadHotList(label) {
   state.lists[label] = data;
 }
 
+async function loadYardCars() {
+  const { data, error } = await db
+    .from("yarda_ahora")
+    .select("*")
+    .order("yard_date", { ascending: false })
+    .limit(1000);
+  if (error) throw error;
+  state.yardCars = data;
+}
+
 async function loadTop() {
   const { data, error } = await db
     .from("hot_list")
@@ -114,9 +126,27 @@ function removeVehicle(label) {
 async function switchTab(tab) {
   state.tab = tab;
   render();
-  if (tab === "top" && state.top === null) {
-    try {
+  try {
+    if (tab === "top" && state.top === null) {
       await loadTop();
+      render();
+    }
+    if (tab === "hoy" && state.yardCars === null) {
+      await loadYardCars();
+      render();
+    }
+  } catch (e) {
+    state.error = "No pude cargar los datos. Revisa tu señal.";
+    render();
+  }
+}
+
+async function toggleCar(vin, label) {
+  state.expanded[vin] = !state.expanded[vin];
+  render();
+  if (state.expanded[vin] && state.lists[label] === undefined) {
+    try {
+      await loadHotList(label);
     } catch (e) {
       state.error = "No pude cargar los datos. Revisa tu señal.";
     }
@@ -189,6 +219,49 @@ function yardaHTML() {
     }`;
 }
 
+function daysInYard(iso) {
+  if (!iso) return "";
+  const d = Math.floor((Date.now() - new Date(iso + "T12:00:00").getTime()) / 864e5);
+  if (d <= 0) return "llegó hoy";
+  if (d === 1) return "llegó ayer";
+  return `llegó hace ${d} días`;
+}
+
+function hoyHTML() {
+  if (state.yardCars === null) return `<div class="loading">Cargando inventario de la yarda…</div>`;
+  if (state.yardCars.length === 0) return `<div class="empty">Ningún carro de la yarda coincide con el radar todavía</div>`;
+
+  const cards = state.yardCars
+    .map((c) => {
+      const isNew = c.yard_date && (Date.now() - new Date(c.yard_date).getTime()) < 7 * 864e5;
+      const open = state.expanded[c.vin];
+      let detail = "";
+      if (open) {
+        const rows = state.lists[c.vehiculo];
+        if (rows === undefined) detail = `<div class="loading">Cargando piezas…</div>`;
+        else if (rows.length === 0) detail = `<div class="empty">Sin datos de piezas</div>`;
+        else detail = rows.map(rowHTML).join("");
+      }
+      return `
+        <div class="rows" style="margin-bottom:10px; border-radius:12px;">
+          <div class="row" data-car="${c.vin}" data-label="${c.vehiculo}" style="cursor:pointer;">
+            <div class="pieza">${isNew ? "🆕 " : ""}${c.year} ${c.make} ${c.model}</div>
+            <div class="precio" style="font-size:20px; color:var(--accent);">${open ? "▲" : "▼"}</div>
+            <div class="meta">Fila ${c.row_number || "?"} · ${c.color || ""} · ${daysInYard(c.yard_date)}</div>
+          </div>
+          ${detail}
+        </div>`;
+    })
+    .join("");
+
+  return `
+    <section class="vehicle-block">
+      <h2>📍 En la yarda ahora: ${state.yardCars.length} carros del radar</h2>
+      <div style="padding:0;">${cards}</div>
+    </section>
+    <div class="hint">Toca un carro para ver qué piezas sacarle.<br>🆕 = llegó esta semana (mejores piezas disponibles).</div>`;
+}
+
 function topHTML() {
   if (state.top === null) return `<div class="loading">Cargando…</div>`;
   if (state.top.length === 0) return `<div class="empty">Aún no hay datos</div>`;
@@ -220,10 +293,11 @@ function render() {
       <div id="updated">${hoursAgoText(state.updatedAt)}</div>
     </header>
     ${state.error ? `<div class="error">${state.error}</div>` : ""}
-    ${state.tab === "yarda" ? yardaHTML() : topHTML()}
+    ${state.tab === "yarda" ? yardaHTML() : state.tab === "hoy" ? hoyHTML() : topHTML()}
     <nav>
-      <button class="${state.tab === "yarda" ? "active" : ""}" data-tab="yarda">🚗 Modo Yarda</button>
-      <button class="${state.tab === "top" ? "active" : ""}" data-tab="top">🔥 Top general</button>
+      <button class="${state.tab === "yarda" ? "active" : ""}" data-tab="yarda">🚗 Buscar</button>
+      <button class="${state.tab === "hoy" ? "active" : ""}" data-tab="hoy">📍 En yarda</button>
+      <button class="${state.tab === "top" ? "active" : ""}" data-tab="top">🔥 Top</button>
     </nav>`;
 
   app.querySelectorAll("[data-tab]").forEach((b) =>
@@ -234,6 +308,9 @@ function render() {
   );
   app.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => removeVehicle(b.dataset.remove)),
+  );
+  app.querySelectorAll("[data-car]").forEach((b) =>
+    b.addEventListener("click", () => toggleCar(b.dataset.car, b.dataset.label)),
   );
 
   const search = app.querySelector("#search");
