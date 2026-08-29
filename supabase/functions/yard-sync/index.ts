@@ -10,8 +10,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const YARD = "HAZLE TOWNSHIP";
-const BASE =
-  "https://wegotused.com/our-inventory/?inv%5Byard%5D=HAZLE%20TOWNSHIP&inv%5Bpage%5D=";
+// El sitio de la yarda (Sucuri) bloquea las IPs de Supabase; se lee a
+// través del relevo /api/yard desplegado en el proyecto de Cloudflare Pages
+// (web/public/_worker.js).
+const BASE = "https://ebay-radar.pages.dev/api/yard?page=";
 const PAGES_PER_RUN = 40; // 15 filas/página; vuelta completa ≈ 5 corridas
 const DELAY_MS = 350;
 

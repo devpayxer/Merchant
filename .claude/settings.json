@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*wrangler deploy*)",
+      "Bash(*wrangler pages deploy*)",
+      "Bash(*wrangler secret put*)",
+      "Bash(*node*deploy_worker.mjs*)"
+    ]
+  }
+}
