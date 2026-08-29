@@ -144,24 +144,34 @@ nav button.active {
 .rows { background: var(--paper); border-radius: 0 0 12px 12px; overflow: hidden; }
 
 .row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2px 10px;
+  display: flex;
+  gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   align-items: center;
 }
 .row:last-child { border-bottom: none; }
+.row .rowbody { flex: 1; min-width: 0; }
+.row .thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex: none;
+  background: var(--ground);
+}
+.row .chev { font-size: 20px; color: var(--accent); flex: none; }
 .row .pieza { font-size: 19px; font-weight: 700; }
 .row .precio {
-  grid-row: span 2;
   font-size: 26px;
   font-weight: 800;
   color: var(--green);
   text-align: right;
   white-space: nowrap;
+  flex: none;
 }
-.row .meta { font-size: 15px; color: var(--ink-soft); }
+.row .meta { font-size: 15px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.row .meta a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .row .sem { font-weight: 700; }
 .sem-hot { color: var(--red); }
 .sem-warn { color: var(--amber); }

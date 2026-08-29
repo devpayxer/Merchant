@@ -17,6 +17,8 @@ const state = {
   top: null,               // filas del top general
   yardCars: null,          // carros de la yarda que están en el radar
   expanded: {},            // vin -> true (carro expandido en "hoy")
+  filterHoy: "",           // filtro en vivo pestaña "En yarda"
+  filterTop: "",           // filtro en vivo pestaña "Top"
   updatedAt: null,
   error: null,
 };
@@ -155,17 +157,43 @@ async function toggleCar(vin, label) {
 }
 
 // ---------- Render ----------
-function rowHTML(r) {
+function rowHTML(r, showVehiculo = false) {
+  const link = r.ebay_url
+    ? ` · <a href="${r.ebay_url}" target="_blank" rel="noopener">ver en eBay ↗</a>`
+    : "";
   return `
     <div class="row">
-      <div class="pieza">${r.pieza}</div>
-      <div class="precio">${money(r.precio_objetivo)}</div>
-      <div class="meta">
-        <span class="sem ${semClass(r.semaforo)}">${r.semaforo ?? ""}</span>
-        · ${r.vendidos_30d ?? 0} vendidos/30d
-        · ${r.competencia ?? 0} compitiendo
+      ${r.foto ? `<img class="thumb" src="${r.foto}" loading="lazy" alt="">` : ""}
+      <div class="rowbody">
+        <div class="pieza">${r.pieza}${showVehiculo ? ` <span class="meta">· ${r.vehiculo}</span>` : ""}</div>
+        <div class="meta">
+          <span class="sem ${semClass(r.semaforo)}">${r.semaforo ?? ""}</span>
+          · ${r.vendidos_30d ?? 0} vendidos/30d
+          · ${r.competencia ?? 0} compitiendo${link}
+        </div>
       </div>
+      <div class="precio">${money(r.precio_objetivo)}</div>
     </div>`;
+}
+
+function filterInputHTML(id, value, placeholder) {
+  return `
+    <div class="search-box">
+      <input id="${id}" type="text" inputmode="search" autocomplete="off"
+        placeholder="${placeholder}" value="${value}" />
+    </div>`;
+}
+
+function bindFilter(id, key) {
+  const el = app.querySelector("#" + id);
+  if (!el) return;
+  el.addEventListener("input", (e) => {
+    state[key] = e.target.value;
+    render();
+    const s = app.querySelector("#" + id);
+    s.focus();
+    s.setSelectionRange(s.value.length, s.value.length);
+  });
 }
 
 function yardaHTML() {
@@ -190,7 +218,7 @@ function yardaHTML() {
       let body;
       if (rows === undefined) body = `<div class="loading">Cargando…</div>`;
       else if (rows.length === 0) body = `<div class="empty">Sin datos para este vehículo</div>`;
-      else body = rows.map(rowHTML).join("");
+      else body = rows.map((r) => rowHTML(r)).join("");
       return `
         <section class="vehicle-block">
           <h2>${l}</h2>
@@ -231,7 +259,13 @@ function hoyHTML() {
   if (state.yardCars === null) return `<div class="loading">Cargando inventario de la yarda…</div>`;
   if (state.yardCars.length === 0) return `<div class="empty">Ningún carro de la yarda coincide con el radar todavía</div>`;
 
-  const cards = state.yardCars
+  const q = norm(state.filterHoy);
+  const cars = q
+    ? state.yardCars.filter((c) =>
+        norm(`${c.year} ${c.make} ${c.model} ${c.color ?? ""} fila ${c.row_number ?? ""}`).includes(q))
+    : state.yardCars;
+
+  const cards = cars
     .map((c) => {
       const isNew = c.yard_date && (Date.now() - new Date(c.yard_date).getTime()) < 7 * 864e5;
       const open = state.expanded[c.vin];
@@ -240,14 +274,16 @@ function hoyHTML() {
         const rows = state.lists[c.vehiculo];
         if (rows === undefined) detail = `<div class="loading">Cargando piezas…</div>`;
         else if (rows.length === 0) detail = `<div class="empty">Sin datos de piezas</div>`;
-        else detail = rows.map(rowHTML).join("");
+        else detail = rows.map((r) => rowHTML(r)).join("");
       }
       return `
         <div class="rows" style="margin-bottom:10px; border-radius:12px;">
           <div class="row" data-car="${c.vin}" data-label="${c.vehiculo}" style="cursor:pointer;">
-            <div class="pieza">${isNew ? "🆕 " : ""}${c.year} ${c.make} ${c.model}</div>
-            <div class="precio" style="font-size:20px; color:var(--accent);">${open ? "▲" : "▼"}</div>
-            <div class="meta">Fila ${c.row_number || "?"} · ${c.color || ""} · ${daysInYard(c.yard_date)}</div>
+            <div class="rowbody">
+              <div class="pieza">${isNew ? "🆕 " : ""}${c.year} ${c.make} ${c.model}</div>
+              <div class="meta">Fila ${c.row_number || "?"} · ${c.color || ""} · ${daysInYard(c.yard_date)}</div>
+            </div>
+            <div class="chev">${open ? "▲" : "▼"}</div>
           </div>
           ${detail}
         </div>`;
@@ -255,9 +291,10 @@ function hoyHTML() {
     .join("");
 
   return `
+    ${filterInputHTML("filter-hoy", state.filterHoy, "🔎 Filtra: marca, modelo, año, fila…")}
     <section class="vehicle-block">
-      <h2>📍 En la yarda ahora: ${state.yardCars.length} carros del radar</h2>
-      <div style="padding:0;">${cards}</div>
+      <h2>📍 En la yarda: ${cars.length}${q ? ` de ${state.yardCars.length}` : ""} carros del radar</h2>
+      <div style="padding:0;">${cards || `<div class="empty">Nada coincide con "${state.filterHoy}"</div>`}</div>
     </section>
     <div class="hint">Toca un carro para ver qué piezas sacarle.<br>🆕 = llegó esta semana (mejores piezas disponibles).</div>`;
 }
@@ -265,24 +302,18 @@ function hoyHTML() {
 function topHTML() {
   if (state.top === null) return `<div class="loading">Cargando…</div>`;
   if (state.top.length === 0) return `<div class="empty">Aún no hay datos</div>`;
-  const blocks = state.top
-    .map(
-      (r) => `
-      <div class="row">
-        <div class="pieza">${r.pieza} <span class="meta">· ${r.vehiculo}</span></div>
-        <div class="precio">${money(r.precio_objetivo)}</div>
-        <div class="meta">
-          <span class="sem ${semClass(r.semaforo)}">${r.semaforo ?? ""}</span>
-          · ${r.vendidos_30d ?? 0} vendidos/30d
-          · ${r.competencia ?? 0} compitiendo
-        </div>
-      </div>`,
-    )
-    .join("");
+
+  const q = norm(state.filterTop);
+  const rows = q
+    ? state.top.filter((r) => norm(`${r.pieza} ${r.vehiculo}`).includes(q))
+    : state.top;
+
+  const blocks = rows.map((r) => rowHTML(r, true)).join("");
   return `
+    ${filterInputHTML("filter-top", state.filterTop, "🔎 Filtra: pieza o vehículo…")}
     <section class="vehicle-block">
       <h2>🔥 Top 50 general</h2>
-      <div class="rows">${blocks}</div>
+      <div class="rows">${blocks || `<div class="empty">Nada coincide con "${state.filterTop}"</div>`}</div>
     </section>`;
 }
 
@@ -323,6 +354,8 @@ function render() {
       s.setSelectionRange(s.value.length, s.value.length);
     });
   }
+  bindFilter("filter-hoy", "filterHoy");
+  bindFilter("filter-top", "filterTop");
 }
 
 // ---------- Arranque ----------

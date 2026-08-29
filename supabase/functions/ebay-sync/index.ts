@@ -97,6 +97,8 @@ async function searchCombo(token: string, combo: Combo) {
     condition?: string;
     seller?: { username?: string };
     price?: { value?: string };
+    image?: { imageUrl?: string };
+    thumbnailImages?: Array<{ imageUrl?: string }>;
   }>;
 }
 
@@ -112,6 +114,7 @@ async function persist(comboId: number, items: Awaited<ReturnType<typeof searchC
       url: i.itemWebUrl ?? null,
       condition: i.condition ?? null,
       seller: i.seller?.username ?? null,
+      image_url: i.image?.imageUrl ?? i.thumbnailImages?.[0]?.imageUrl ?? null,
       last_seen: now,
       ended_at: null, // si reapareció, lo revivimos
     }));
