@@ -80,11 +80,12 @@ Deno.serve(async () => {
       const m = html.match(/Showing (\d+) to (\d+) of (\d+)/);
       if (m) total = Number(m[3]);
 
-      const batch: Record<string, unknown>[] = [];
+      // Map por VIN: la yarda a veces repite un carro en la misma página
+      const byVin = new Map<string, Record<string, unknown>>();
       for (const r of html.matchAll(ROW_RE)) {
         const [, year, make, model, mfr, color, date, row, vin] = r;
         if (!vin?.trim()) continue;
-        batch.push({
+        byVin.set(vin.trim(), {
           vin: vin.trim(),
           yard: YARD,
           year: Number(year) || null,
@@ -99,6 +100,7 @@ Deno.serve(async () => {
         });
       }
 
+      const batch = [...byVin.values()];
       if (batch.length > 0) {
         const { error } = await supabase
           .from("yard_inventory")
@@ -143,6 +145,7 @@ Deno.serve(async () => {
     );
   } catch (err) {
     console.error(err);
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+    const detail = err instanceof Error ? err.message : JSON.stringify(err);
+    return new Response(JSON.stringify({ error: detail }), { status: 500 });
   }
 });
