@@ -95,6 +95,10 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   además $2 de entrada POR VISITA (no se prorratea por pieza). XL = solo
   recogida local, no listar.
 - Precio de publicación sugerido: 10-15% bajo la mediana.
+- ENDED_AFTER_DAYS = 5 (aprobado 30 ago: con 9,350 combos cada uno se revisa
+  cada ~2.5-3 días; umbral de 3 daría falsos vendidos). Bajarlo cuando el
+  Growth Check de eBay suba el límite de llamadas. NO abrir múltiples cuentas
+  de developer para dividir carga (viola políticas de eBay; riesgo de baneo).
 - Tiempo de manejo en listados: 2 días hábiles.
 
 ### Pendiente 1 — Al llegar las llaves de eBay (aprobación en curso)

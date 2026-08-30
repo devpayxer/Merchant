@@ -16,7 +16,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const BATCH_SIZE = 150;          // combos por corrida (150 × 24 corridas ≈ 3,600 llamadas/día, bajo el límite de 5,000)
 const RESULTS_PER_COMBO = 50;    // listados por consulta
-const ENDED_AFTER_DAYS = 3;      // no visto en N días => lo damos por vendido/terminado
+const ENDED_AFTER_DAYS = 5;      // no visto en N días => lo damos por vendido/terminado
+// 5 días aprobado por el dueño (30 ago 2026): con 9,350 combos y 3,600
+// llamadas/día cada combo se revisa cada ~2.5-3 días; un umbral de 3 daría
+// falsos "vendidos". Bajarlo de nuevo cuando el Growth Check suba el límite.
 const MIN_PRICE = 10;            // ignora listados de menos de $10 (no vale el esfuerzo)
 
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
