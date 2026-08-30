@@ -286,12 +286,13 @@ function rowHTML(r, showVehiculo = false, car = null) {
     if (state.pulled.has(key)) {
       pullBtn = `<div class="pull-done">✓ En tu inventario</div>`;
     } else {
+      const yCtx = car?.yard ?? (state.yardFilter !== "all" ? state.yardFilter : "HAZLE TOWNSHIP");
       const payload = encodeURIComponent(JSON.stringify({
         key,
         vehiculo: r.vehiculo,
         pieza: r.pieza,
         precio: r.precio_objetivo ?? null,
-        costo: r.costo_yarda ?? null,
+        costo: (yCtx === "EZ PULL" ? r.costo_ez : r.costo_yarda) ?? null,
         vin: car?.vin ?? null,
         fila: car?.row_number ?? null,
       }));
@@ -299,21 +300,29 @@ function rowHTML(r, showVehiculo = false, car = null) {
     }
   }
 
-  // Línea de precios: "Yarda $42 → eBay $95"
+  // Yarda de contexto: la del carro expandido, o la del selector
+  const yardCtx = car?.yard ?? (state.yardFilter !== "all" ? state.yardFilter : "HAZLE TOWNSHIP");
+  const isEz = yardCtx === "EZ PULL";
+  const costo = isEz ? r.costo_ez : r.costo_yarda;
+  const gan = isEz ? r.ganancia_ez : r.ganancia_neta;
+  const rent = isEz ? r.rentabilidad_ez : r.rentabilidad;
+  const yardName = isEz ? "EZ" : "Harry's";
+
+  // Línea de precios: "Harry's $45 → eBay $95"
   let precios = "";
-  if (r.costo_yarda != null) {
-    precios = `<div class="precios"><span class="yarda">Yarda ${money(Math.round(r.costo_yarda))}</span>${
+  if (costo != null) {
+    precios = `<div class="precios"><span class="yarda">${yardName} ${money(Math.round(costo))}</span>${
       r.precio_objetivo != null ? ` → <span class="ebay">eBay ${money(r.precio_objetivo)}</span>` : ""
     }</div>`;
   }
 
   // Lado derecho: ganancia neta cuando existe; si no, el precio de eBay
   let derecha;
-  if (r.ganancia_neta != null) {
-    const g = Number(r.ganancia_neta);
+  if (gan != null) {
+    const g = Number(gan);
     const tag =
-      r.rentabilidad === "alta" ? `<div class="gan-tag alta">SÁCALA</div>` :
-      r.rentabilidad === "media" ? `<div class="gan-tag media">REGULAR</div>` :
+      rent === "alta" ? `<div class="gan-tag alta">SÁCALA</div>` :
+      rent === "media" ? `<div class="gan-tag media">REGULAR</div>` :
       `<div class="gan-tag baja">NO VALE</div>`;
     derecha = `<div class="gan"><div class="gan-num ${g < 15 ? "baja" : ""}">${g >= 0 ? "+" : "−"}$${Math.abs(g)}</div>${tag}</div>`;
   } else {
