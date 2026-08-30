@@ -75,9 +75,10 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
      vive en `web/public/_worker.js`). Con VINs.
   2. EZ Pull & Save (New Ringgold, PA, a 40 min, más barata): JSON directo de
      ezpullandsave.com/get_inventory.php (2,012 carros, fila y fecha, SIN
-     VINs — id sintético EZ-<hash>). $2 entrada, CASH ONLY. PENDIENTE: su
-     lista de precios (el usuario la fotografiará) → soporte multi-yarda en
-     yard_prices; mientras tanto la ganancia usa precios de Harry's.
+     VINs — id sintético EZ-<hash>). $2 entrada, CASH ONLY. Su lista de
+     precios ya está cargada (52 piezas, multi-yarda en yard_prices con pk
+     (yard, part_type_id)); la web muestra el precio de la yarda en contexto.
+     OJO: su lista imprime "Alternator 3.00" (¿errata por 30?) — verificar.
 - VIN decodificado con NHTSA vPIC (modelo real, trim, motor, HP) + códigos de
   chasis/motor derivados para BMW/Mini/Mercedes (tablas en yard-sync).
 - Pestaña "Mío": inventario propio con login (a.ledesma@payxer.com), estados
