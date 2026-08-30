@@ -117,8 +117,24 @@ Crear tabla `yard_prices` (pieza → precio de la yarda), cargarla, y:
 Al marcar pieza "en bodega", generar borrador copiable: título con specs del
 VIN ("11 BMW 328i E90 N52 Right Headlight OEM"), precio sugerido, categoría,
 condición, compatibilidad. El usuario publica manual desde la app de eBay
-(cuenta nueva tiene límites ~10 items/$500 al mes; Fase C de Sell APIs
-esperará a que haya historial de ventas).
+(cuenta nueva tiene límites ~10 items/$500 al mes).
+
+### Pendiente 4 — Fase C: "La saqué" → listado automático (visión acordada)
+
+Flujo final acordado con el usuario (30 ago 2026):
+1. Tocar "＋ La saqué" crea el listado COMPLETO en la cuenta de eBay vía
+   Sell API (Inventory API: inventory item + offer SIN publicar — eBay no
+   tiene borradores por API, la oferta sin publicar es el equivalente).
+   Título/precio/specs/envío gratis/compatibilidad salen del radar + VIN.
+2. En "Mío" la pieza queda "📷 Falta foto": botón que abre la cámara del
+   teléfono en nuestra web, sube 2-3 fotos (Media API / Picture Services)
+   y publica la oferta. El usuario nunca abre la app de eBay.
+
+Prerrequisitos: cuenta de vendedor activa + OAuth de usuario (botón
+"Conectar mi eBay", flujo authorization code con redirect en
+ebay-radar.pages.dev + endpoint de marketplace account deletion),
+políticas de negocio configuradas (Account API), y que los límites de
+cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
 
 ### Otras notas operativas
 
