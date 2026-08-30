@@ -374,7 +374,15 @@ function hoyHTML() {
     .map((c) => {
       const isNew = c.yard_date && (Date.now() - new Date(c.yard_date).getTime()) < 7 * 864e5;
       const open = state.expanded[c.vin];
-      const specs = [c.engine, c.drive_type, c.trim].filter(Boolean).join(" · ");
+      // Modelo real del VIN ("328i") sobre el genérico de la yarda ("3 SERIES")
+      const titulo = `${c.year} ${c.make} ${c.model_detail || c.model}${c.trim ? " " + c.trim : ""}`;
+      const specs = [
+        c.chassis_code,
+        c.engine,
+        c.engine_code,
+        c.engine_hp ? `${c.engine_hp}hp` : null,
+        c.drive_type,
+      ].filter(Boolean).join(" · ");
       let detail = "";
       if (open) {
         const rows = state.lists[c.vehiculo];
@@ -386,7 +394,7 @@ function hoyHTML() {
         <div class="rows" style="margin-bottom:10px; border-radius:12px;">
           <div class="row" data-car="${c.vin}" data-label="${c.vehiculo}" style="cursor:pointer;">
             <div class="rowbody">
-              <div class="pieza">${isNew ? "🆕 " : ""}${c.year} ${c.make} ${c.model}</div>
+              <div class="pieza">${isNew ? "🆕 " : ""}${titulo}</div>
               <div class="meta">Fila ${c.row_number || "?"} · ${c.color || ""} · ${daysInYard(c.yard_date)}</div>
               ${specs ? `<div class="meta">${specs}</div>` : ""}
               ${open ? `<div class="meta vin">VIN ${c.vin}</div>` : ""}
