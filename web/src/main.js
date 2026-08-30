@@ -286,13 +286,16 @@ function rowHTML(r, showVehiculo = false, car = null) {
     if (state.pulled.has(key)) {
       pullBtn = `<div class="pull-done">✓ En tu inventario</div>`;
     } else {
-      const yCtx = car?.yard ?? (state.yardFilter !== "all" ? state.yardFilter : "HAZLE TOWNSHIP");
+      const yCtx = car?.yard ?? state.yardFilter;
+      const costoPull = yCtx === "EZ PULL" ? r.costo_ez
+        : yCtx === "HAZLE TOWNSHIP" ? r.costo_yarda
+        : Math.min(r.costo_yarda ?? Infinity, r.costo_ez ?? Infinity);
       const payload = encodeURIComponent(JSON.stringify({
         key,
         vehiculo: r.vehiculo,
         pieza: r.pieza,
         precio: r.precio_objetivo ?? null,
-        costo: (yCtx === "EZ PULL" ? r.costo_ez : r.costo_yarda) ?? null,
+        costo: Number.isFinite(costoPull) ? costoPull : null,
         vin: car?.vin ?? null,
         fila: car?.row_number ?? null,
       }));
@@ -300,31 +303,40 @@ function rowHTML(r, showVehiculo = false, car = null) {
     }
   }
 
-  // Yarda de contexto: la del carro expandido, o la del selector
-  const yardCtx = car?.yard ?? (state.yardFilter !== "all" ? state.yardFilter : "HAZLE TOWNSHIP");
-  const isEz = yardCtx === "EZ PULL";
-  const costo = isEz ? r.costo_ez : r.costo_yarda;
-  const gan = isEz ? r.ganancia_ez : r.ganancia_neta;
-  const rent = isEz ? r.rentabilidad_ez : r.rentabilidad;
-  const yardName = isEz ? "EZ" : "Harry's";
+  // Yarda de contexto: la del carro expandido, la del selector, o comparar
+  const yardCtx = car?.yard ?? state.yardFilter;
+  const harrys = { costo: r.costo_yarda, gan: r.ganancia_neta, rent: r.rentabilidad, nombre: "Harry's" };
+  const ez = { costo: r.costo_ez, gan: r.ganancia_ez, rent: r.rentabilidad_ez, nombre: "EZ" };
+  const comparando = yardCtx === "all";
+  let sel; // yarda cuyos números se muestran a la derecha
+  if (yardCtx === "EZ PULL") sel = ez;
+  else if (yardCtx === "HAZLE TOWNSHIP") sel = harrys;
+  else {
+    // Comparar: gana la yarda con mejor ganancia (o la que tenga datos)
+    if (ez.gan != null && (harrys.gan == null || Number(ez.gan) > Number(harrys.gan))) sel = ez;
+    else if (harrys.gan != null) sel = harrys;
+    else sel = ez.costo != null && (harrys.costo == null || ez.costo < harrys.costo) ? ez : harrys;
+  }
 
-  // Línea de precios: "Harry's $45 → eBay $95"
+  // Línea de precios: en modo comparar muestra ambas yardas
   let precios = "";
-  if (costo != null) {
-    precios = `<div class="precios"><span class="yarda">${yardName} ${money(Math.round(costo))}</span>${
-      r.precio_objetivo != null ? ` → <span class="ebay">eBay ${money(r.precio_objetivo)}</span>` : ""
-    }</div>`;
+  const pEbay = r.precio_objetivo != null ? ` → <span class="ebay">eBay ${money(r.precio_objetivo)}</span>` : "";
+  if (comparando && harrys.costo != null && ez.costo != null) {
+    precios = `<div class="precios"><span class="yarda">Harry's ${money(Math.round(harrys.costo))}</span> · <span class="yarda">EZ ${money(Math.round(ez.costo))}</span>${pEbay}</div>`;
+  } else if (sel.costo != null) {
+    precios = `<div class="precios"><span class="yarda">${sel.nombre} ${money(Math.round(sel.costo))}</span>${pEbay}</div>`;
   }
 
   // Lado derecho: ganancia neta cuando existe; si no, el precio de eBay
   let derecha;
-  if (gan != null) {
-    const g = Number(gan);
+  if (sel.gan != null) {
+    const g = Number(sel.gan);
     const tag =
-      rent === "alta" ? `<div class="gan-tag alta">SÁCALA</div>` :
-      rent === "media" ? `<div class="gan-tag media">REGULAR</div>` :
+      sel.rent === "alta" ? `<div class="gan-tag alta">SÁCALA</div>` :
+      sel.rent === "media" ? `<div class="gan-tag media">REGULAR</div>` :
       `<div class="gan-tag baja">NO VALE</div>`;
-    derecha = `<div class="gan"><div class="gan-num ${g < 15 ? "baja" : ""}">${g >= 0 ? "+" : "−"}$${Math.abs(g)}</div>${tag}</div>`;
+    const enYarda = comparando ? `<div class="gan-yard">en ${sel.nombre}</div>` : "";
+    derecha = `<div class="gan"><div class="gan-num ${g < 15 ? "baja" : ""}">${g >= 0 ? "+" : "−"}$${Math.abs(g)}</div>${tag}${enYarda}</div>`;
   } else {
     derecha = `<div class="precio">${money(r.precio_objetivo)}</div>`;
   }
@@ -343,6 +355,17 @@ function rowHTML(r, showVehiculo = false, car = null) {
         ${pullBtn}
       </div>
       ${derecha}
+    </div>`;
+}
+
+function yardChipsHTML() {
+  const chip = (val, label) =>
+    `<button class="yard-chip ${state.yardFilter === val ? "on" : ""}" data-yard="${val}">${label}</button>`;
+  return `
+    <div class="yard-chips">
+      ${chip("all", "Todas")}
+      ${chip("HAZLE TOWNSHIP", "Harry's")}
+      ${chip("EZ PULL", "EZ Pull")}
     </div>`;
 }
 
@@ -398,6 +421,7 @@ function yardaHTML() {
     .join("");
 
   return `
+    ${yardChipsHTML()}
     <div class="search-box">
       <input id="search" type="text" inputmode="search" autocomplete="off"
         placeholder="🔎 Busca el carro (ej. Civic)" value="${state.query}" />
@@ -474,15 +498,8 @@ function hoyHTML() {
     })
     .join("");
 
-  const yardChip = (val, label) =>
-    `<button class="yard-chip ${state.yardFilter === val ? "on" : ""}" data-yard="${val}">${label}</button>`;
-
   return `
-    <div class="yard-chips">
-      ${yardChip("all", "Todas")}
-      ${yardChip("HAZLE TOWNSHIP", "Harry's")}
-      ${yardChip("EZ PULL", "EZ Pull")}
-    </div>
+    ${yardChipsHTML()}
     ${filterInputHTML("filter-hoy", state.filterHoy, "🔎 Filtra: marca, modelo, año, fila…")}
     <section class="vehicle-block">
       <h2>📍 En la yarda: ${cars.length}${q ? ` de ${porYarda.length}` : ""} carros del radar</h2>
@@ -502,6 +519,7 @@ function topHTML() {
 
   const blocks = rows.map((r) => rowHTML(r, true)).join("");
   return `
+    ${yardChipsHTML()}
     ${filterInputHTML("filter-top", state.filterTop, "🔎 Filtra: pieza o vehículo…")}
     <section class="vehicle-block">
       <h2>🔥 Top 50 general</h2>
