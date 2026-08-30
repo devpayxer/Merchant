@@ -85,7 +85,9 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   mejor sistema de ventas sobre eBay. No sugerir multicanal.
 - **Envío GRATIS en todos los listados** (los comps lo incluyen en el precio).
   Ganancia neta = precio × 0.85 (comisión) − envío por clase (S $6 / M $13 /
-  L $22) − $2 empaque − costo de yarda. XL = solo recogida local, no listar.
+  L $22) − $2 empaque − costo de yarda × 1.06 (sales tax PA). La yarda cobra
+  además $2 de entrada POR VISITA (no se prorratea por pieza). XL = solo
+  recogida local, no listar.
 - Precio de publicación sugerido: 10-15% bajo la mediana.
 - Tiempo de manejo en listados: 2 días hábiles.
 
@@ -108,7 +110,7 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 Tabla `yard_prices` cargada con los 55 precios de la lista impresa de Harry's
 (price + core, notas de mapeo por fila). hot_list calcula ganancia_neta y
 rentabilidad; la web muestra "Yarda $X → eBay $Y" y autollena el costo en
-"La saqué". FALTA: confirmar con el usuario cuota de entrada y sales tax de PA.
+"La saqué". Confirmado: entrada $2/visita, sales tax PA 6% (ya en la fórmula).
 Lo original pedido era:
 - Mostrar en TODAS las piezas: "Yarda $X → eBay $Y" + ganancia neta grande +
   etiqueta de rentabilidad (verde ≥$40 / naranja $15-40 / gris "NO VALE").
