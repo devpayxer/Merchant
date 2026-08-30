@@ -140,7 +140,12 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
      competencia usada. Semáforo v2: 🟢 venta casi segura / 🟡 demanda alta
      pero precio agresivo / ⚪ sin señal. precio_min aftermarket = techo de
      publicación del OEM usado.
-   - Presupuesto: SOLO combos con carros vivos en las yardas (accionables),
+   - La fila mantiene la comparación multi-yarda ya construida: costos de
+     Harry's Y EZ con la ganancia de la yarda ganadora ("en EZ"/"en Harry's")
+     y respeta el selector Todas/Harry's/EZ Pull. Ej.:
+     "Harry's $27 · EZ $21 → publica a $85-95 · ganancia ~$51 en EZ".
+   - Presupuesto (CONFIRMADO por el usuario): SOLO combos con carros vivos
+     en las yardas (accionables),
      top 3-5 listados, refresh semanal ≈ 1,000-1,300 llamadas/día — cabe en
      el slack de 1,400 (usamos 3,600 de 5,000). Ampliar a todos los combos
      cuando el Growth Check suba el límite.
