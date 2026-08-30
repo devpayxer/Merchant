@@ -10,6 +10,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const YARD = "HAZLE TOWNSHIP";
+// Segunda yarda: EZ Pull & Save (New Ringgold, PA). Publica su inventario
+// como JSON limpio (year/make/model/row/placement_date), sin VINs — se les
+// genera un id sintético "EZ-<hash>" y no pasan por el decodificador NHTSA.
+const EZ_YARD = "EZ PULL";
+const EZ_URL = "https://www.ezpullandsave.com/get_inventory.php";
 // El sitio de la yarda (Sucuri) bloquea las IPs de Supabase; se lee a
 // través del relevo /api/yard desplegado en el proyecto de Cloudflare Pages
 // (web/public/_worker.js).
@@ -141,6 +146,58 @@ function deriveEngineCode(make: string, model: string, year: number, disp: numbe
     return year <= 2006 ? "M54" : year <= 2010 ? "N52" : "N55";
   }
   return null;
+}
+
+async function syncEzPull(): Promise<number> {
+  const res = await fetch(EZ_URL, {
+    headers: { "User-Agent": "Mozilla/5.0 (ebay-radar yard-sync)" },
+  });
+  if (!res.ok) throw new Error(`EZ Pull: ${res.status}`);
+  const data = (await res.json()) as Array<{
+    year?: string; make?: string; model?: string; row?: string; placement_date?: string;
+  }>;
+  if (!Array.isArray(data) || data.length === 0) return 0;
+
+  const now = new Date().toISOString();
+  const seen = new Map<string, number>();
+  const batch: Record<string, unknown>[] = [];
+  for (const r of data) {
+    const base = `${r.year}|${(r.make ?? "").toUpperCase()}|${(r.model ?? "").toUpperCase()}|${r.row}|${r.placement_date}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(`${base}|${n}`));
+    const id = "EZ-" + Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 14);
+    batch.push({
+      vin: id,
+      yard: EZ_YARD,
+      year: Number(r.year) || null,
+      make: (r.make ?? "").trim().toUpperCase(),
+      model: (r.model ?? "").trim().toUpperCase(),
+      manufacturer: (r.make ?? "").trim(),
+      color: null,
+      yard_date: parseDate(r.placement_date ?? ""),
+      row_number: (r.row ?? "").trim(),
+      last_seen: now,
+      left_at: null,
+      vin_decoded_at: now, // id sintético: no intentar decodificar en NHTSA
+    });
+  }
+  for (let i = 0; i < batch.length; i += 500) {
+    const { error } = await supabase
+      .from("yard_inventory")
+      .upsert(batch.slice(i, i + 500), { onConflict: "vin" });
+    if (error) throw error;
+  }
+  // Lo que ya no aparece en el JSON de EZ => se fue de la yarda
+  const cutoff = new Date(Date.now() - 3 * 864e5).toISOString();
+  const { error } = await supabase
+    .from("yard_inventory")
+    .update({ left_at: now })
+    .eq("yard", EZ_YARD)
+    .is("left_at", null)
+    .lt("last_seen", cutoff);
+  if (error) throw error;
+  return batch.length;
 }
 
 async function decodeVins(limit: number): Promise<number> {
@@ -320,9 +377,6 @@ Deno.serve(async (req) => {
       if (e1) throw e1;
     }
 
-    const { error: e2 } = await supabase.rpc("refresh_yard_matches");
-    if (e2) throw e2;
-
     // Decodifica un lote de VINs pendientes en cada corrida (carros nuevos)
     let decoded = 0;
     try {
@@ -331,6 +385,18 @@ Deno.serve(async (req) => {
       console.error("decode VINs:", err); // no tumba el sync del inventario
     }
 
+    // Sincroniza EZ Pull (1 request, JSON completo) en cada corrida
+    let ez = 0;
+    try {
+      ez = await syncEzPull();
+    } catch (err) {
+      console.error("EZ Pull:", err); // no tumba el sync de Harry's
+    }
+
+    // Recalcular el cruce al final, con TODAS las yardas ya sincronizadas
+    const { error: e2 } = await supabase.rpc("refresh_yard_matches");
+    if (e2) throw e2;
+
     const { error: e3 } = await supabase
       .from("yard_sync_state")
       .update({ next_page: page, total_records: total, last_run_at: now })
@@ -338,7 +404,7 @@ Deno.serve(async (req) => {
     if (e3) throw e3;
 
     return new Response(
-      JSON.stringify({ rows, next_page: page, total, wrapped, decoded, ms: Date.now() - started }),
+      JSON.stringify({ rows, next_page: page, total, wrapped, decoded, ez, ms: Date.now() - started }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {

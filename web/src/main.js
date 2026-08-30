@@ -8,6 +8,7 @@ const SUPABASE_ANON_KEY =
 
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+
 const state = {
   tab: "yarda",            // "yarda" | "hoy" | "top"
   vehicles: [],            // [{id, label}]
@@ -18,6 +19,7 @@ const state = {
   yardCars: null,          // carros de la yarda que están en el radar
   expanded: {},            // vin -> true (carro expandido en "hoy")
   filterHoy: "",           // filtro en vivo pestaña "En yarda"
+  yardFilter: "all",       // "all" | "HAZLE TOWNSHIP" | "EZ PULL"
   filterTop: "",           // filtro en vivo pestaña "Top"
   user: null,              // sesión del dueño (Supabase Auth)
   inv: null,               // filas de my_inventory
@@ -104,13 +106,19 @@ async function loadHotList(label) {
 }
 
 async function loadYardCars() {
-  const { data, error } = await db
-    .from("yarda_ahora")
-    .select("*")
-    .order("yard_date", { ascending: false })
-    .limit(1000);
-  if (error) throw error;
-  state.yardCars = data;
+  // Paginado: entre las dos yardas puede haber más de 1,000 filas
+  const all = [];
+  for (let i = 0; i < 5; i++) {
+    const { data, error } = await db
+      .from("yarda_ahora")
+      .select("*")
+      .order("yard_date", { ascending: false })
+      .range(i * 1000, i * 1000 + 999);
+    if (error) throw error;
+    all.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  state.yardCars = all;
 }
 
 async function loadInv() {
@@ -413,10 +421,13 @@ function hoyHTML() {
   if (state.yardCars.length === 0) return `<div class="empty">Ningún carro de la yarda coincide con el radar todavía</div>`;
 
   const q = norm(state.filterHoy);
+  const porYarda = state.yardFilter === "all"
+    ? state.yardCars
+    : state.yardCars.filter((c) => c.yard === state.yardFilter);
   const cars = q
-    ? state.yardCars.filter((c) =>
+    ? porYarda.filter((c) =>
         norm(`${c.year} ${c.make} ${c.model} ${c.color ?? ""} fila ${c.row_number ?? ""}`).includes(q))
-    : state.yardCars;
+    : porYarda;
 
   const cards = cars
     .map((c) => {
@@ -443,9 +454,9 @@ function hoyHTML() {
           <div class="row" data-car="${c.vin}" data-label="${c.vehiculo}" style="cursor:pointer;">
             <div class="rowbody">
               <div class="pieza">${isNew ? "🆕 " : ""}${titulo}</div>
-              <div class="meta">Fila ${c.row_number || "?"} · ${c.color || ""} · ${daysInYard(c.yard_date)}</div>
+              <div class="meta">${state.yardFilter === "all" ? `<b>${c.yard === "EZ PULL" ? "EZ Pull" : "Harry's"}</b> · ` : ""}Fila ${c.row_number || "?"}${c.color ? ` · ${c.color}` : ""} · ${daysInYard(c.yard_date)}</div>
               ${specs ? `<div class="meta">${specs}</div>` : ""}
-              ${open ? `<div class="meta vin">VIN ${c.vin}</div>` : ""}
+              ${open && !c.vin.startsWith("EZ-") ? `<div class="meta vin">VIN ${c.vin}</div>` : ""}
             </div>
             <div class="chev">${open ? "▲" : "▼"}</div>
           </div>
@@ -454,10 +465,18 @@ function hoyHTML() {
     })
     .join("");
 
+  const yardChip = (val, label) =>
+    `<button class="yard-chip ${state.yardFilter === val ? "on" : ""}" data-yard="${val}">${label}</button>`;
+
   return `
+    <div class="yard-chips">
+      ${yardChip("all", "Todas")}
+      ${yardChip("HAZLE TOWNSHIP", "Harry's")}
+      ${yardChip("EZ PULL", "EZ Pull")}
+    </div>
     ${filterInputHTML("filter-hoy", state.filterHoy, "🔎 Filtra: marca, modelo, año, fila…")}
     <section class="vehicle-block">
-      <h2>📍 En la yarda: ${cars.length}${q ? ` de ${state.yardCars.length}` : ""} carros del radar</h2>
+      <h2>📍 En la yarda: ${cars.length}${q ? ` de ${porYarda.length}` : ""} carros del radar</h2>
       <div style="padding:0;">${cards || `<div class="empty">Nada coincide con "${state.filterHoy}"</div>`}</div>
     </section>
     <div class="hint">Toca un carro para ver qué piezas sacarle.<br>🆕 = llegó esta semana (mejores piezas disponibles).</div>`;
@@ -583,6 +602,12 @@ function render() {
   );
   app.querySelectorAll("[data-car]").forEach((b) =>
     b.addEventListener("click", () => toggleCar(b.dataset.car, b.dataset.label)),
+  );
+  app.querySelectorAll("[data-yard]").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.yardFilter = b.dataset.yard;
+      render();
+    }),
   );
 
   const search = app.querySelector("#search");

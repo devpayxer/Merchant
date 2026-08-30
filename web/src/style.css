@@ -173,6 +173,21 @@ nav button.active {
 .row .meta { font-size: 15px; color: var(--ink-soft); overflow-wrap: anywhere; }
 .meta.vin { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; letter-spacing: 0.5px; }
 
+/* Selector de yarda */
+.yard-chips { display: flex; gap: 8px; padding: 12px 14px 0; }
+.yard-chip {
+  flex: 1;
+  min-height: 46px;
+  font-size: 16px;
+  font-weight: 800;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.yard-chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+
 /* Precios yarda vs eBay + ganancia neta */
 .precios { font-size: 15px; font-weight: 700; margin-top: 3px; }
 .precios .yarda { color: var(--amber); }
