@@ -80,6 +80,9 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 
 ### Decisiones de negocio tomadas (no cambiar sin preguntar)
 
+- **Canal único: eBay.** El usuario decidió NO diversificar a otros
+  marketplaces (Facebook, Mercari, etc.); toda la energía va a construir el
+  mejor sistema de ventas sobre eBay. No sugerir multicanal.
 - **Envío GRATIS en todos los listados** (los comps lo incluyen en el precio).
   Ganancia neta = precio × 0.85 (comisión) − envío por clase (S $6 / M $13 /
   L $22) − $2 empaque − costo de yarda. XL = solo recogida local, no listar.
