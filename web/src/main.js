@@ -374,6 +374,7 @@ function hoyHTML() {
     .map((c) => {
       const isNew = c.yard_date && (Date.now() - new Date(c.yard_date).getTime()) < 7 * 864e5;
       const open = state.expanded[c.vin];
+      const specs = [c.engine, c.drive_type, c.trim].filter(Boolean).join(" · ");
       let detail = "";
       if (open) {
         const rows = state.lists[c.vehiculo];
@@ -387,6 +388,8 @@ function hoyHTML() {
             <div class="rowbody">
               <div class="pieza">${isNew ? "🆕 " : ""}${c.year} ${c.make} ${c.model}</div>
               <div class="meta">Fila ${c.row_number || "?"} · ${c.color || ""} · ${daysInYard(c.yard_date)}</div>
+              ${specs ? `<div class="meta">${specs}</div>` : ""}
+              ${open ? `<div class="meta vin">VIN ${c.vin}</div>` : ""}
             </div>
             <div class="chev">${open ? "▲" : "▼"}</div>
           </div>
@@ -468,6 +471,7 @@ function mioHTML() {
             ${i.costo != null ? ` · costo ${money(i.costo)}` : ""}
             ${i.precio_venta != null ? ` · vendida en ${money(i.precio_venta)}` : i.precio_listado != null ? ` · listada en ${money(i.precio_listado)}` : i.precio_mercado != null ? ` · mercado ${money(i.precio_mercado)}` : ""}
           </div>
+          ${i.vin ? `<div class="meta vin">VIN ${i.vin}</div>` : ""}
           <div class="inv-actions">
             ${e.next ? `<button class="estado-btn" data-avanza="${i.id}" data-estado="${i.estado}">${e.next}</button>` : ""}
             <button class="del-btn" data-borra="${i.id}">✕</button>

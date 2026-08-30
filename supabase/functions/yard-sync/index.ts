@@ -30,9 +30,84 @@ function parseDate(mmddyyyy: string): string | null {
   return yy ? `${yy}-${mm}-${dd}` : null;
 }
 
-Deno.serve(async () => {
+// ---------- Decodificar VINs con la API pública NHTSA vPIC ----------
+const NHTSA_BATCH_URL =
+  "https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVINValuesBatch/";
+
+function shortDrive(d: string): string | null {
+  if (!d) return null;
+  return d.split("/")[0].trim() || null; // "AWD/All-Wheel Drive" -> "AWD"
+}
+
+function engineText(r: Record<string, string>): string | null {
+  const parts: string[] = [];
+  const disp = Number(r.DisplacementL);
+  if (Number.isFinite(disp) && disp > 0) parts.push(`${Math.round(disp * 10) / 10}L`);
+  if (r.EngineCylinders) parts.push(`${r.EngineCylinders}cyl`);
+  if (r.FuelTypePrimary && r.FuelTypePrimary !== "Gasoline") parts.push(r.FuelTypePrimary);
+  return parts.length ? parts.join(" ") : null;
+}
+
+async function decodeVins(limit: number): Promise<number> {
+  const { data: pending, error } = await supabase
+    .from("yard_inventory")
+    .select("vin")
+    .is("vin_decoded_at", null)
+    .is("left_at", null)
+    .limit(limit);
+  if (error) throw error;
+  if (!pending || pending.length === 0) return 0;
+
+  let decoded = 0;
+  const now = new Date().toISOString();
+  for (let i = 0; i < pending.length; i += 50) {
+    const vins = pending.slice(i, i + 50).map((p) => p.vin);
+    const res = await fetch(NHTSA_BATCH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `DATA=${encodeURIComponent(vins.join(";"))}&format=json`,
+    });
+    if (!res.ok) throw new Error(`NHTSA: ${res.status}`);
+    const results = (await res.json()).Results as Record<string, string>[];
+
+    for (const r of results ?? []) {
+      const vin = (r.VIN ?? "").trim();
+      if (!vin) continue;
+      const { error: e } = await supabase
+        .from("yard_inventory")
+        .update({
+          trim: r.Trim || null,
+          engine: engineText(r),
+          drive_type: shortDrive(r.DriveType),
+          body_class: r.BodyClass || null,
+          vin_decoded_at: now,
+        })
+        .eq("vin", vin);
+      if (e) throw e;
+      decoded++;
+    }
+    // Marca también los que NHTSA no devolvió para no reintentarlos por siempre
+    const returned = new Set((results ?? []).map((r) => (r.VIN ?? "").trim()));
+    for (const vin of vins.filter((v) => !returned.has(v))) {
+      await supabase.from("yard_inventory").update({ vin_decoded_at: now }).eq("vin", vin);
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return decoded;
+}
+
+Deno.serve(async (req) => {
   const started = Date.now();
   try {
+    // Modo "solo decodificar" para backfill: POST {"mode":"decode","limit":500}
+    const body = await req.json().catch(() => ({}));
+    if (body?.mode === "decode") {
+      const decoded = await decodeVins(Math.min(Number(body.limit) || 500, 1000));
+      return new Response(
+        JSON.stringify({ decoded, ms: Date.now() - started }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }
     const { data: state, error: e0 } = await supabase
       .from("yard_sync_state")
       .select("next_page")
@@ -133,6 +208,14 @@ Deno.serve(async () => {
     const { error: e2 } = await supabase.rpc("refresh_yard_matches");
     if (e2) throw e2;
 
+    // Decodifica un lote de VINs pendientes en cada corrida (carros nuevos)
+    let decoded = 0;
+    try {
+      decoded = await decodeVins(100);
+    } catch (err) {
+      console.error("decode VINs:", err); // no tumba el sync del inventario
+    }
+
     const { error: e3 } = await supabase
       .from("yard_sync_state")
       .update({ next_page: page, total_records: total, last_run_at: now })
@@ -140,7 +223,7 @@ Deno.serve(async () => {
     if (e3) throw e3;
 
     return new Response(
-      JSON.stringify({ rows, next_page: page, total, wrapped, ms: Date.now() - started }),
+      JSON.stringify({ rows, next_page: page, total, wrapped, decoded, ms: Date.now() - started }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {
