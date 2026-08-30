@@ -96,9 +96,15 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   además $2 de entrada POR VISITA (no se prorratea por pieza). XL = solo
   recogida local, no listar.
 - Precio de publicación sugerido: 10-15% bajo la mediana.
-- ENDED_AFTER_DAYS = 5 (aprobado 30 ago: con 9,350 combos cada uno se revisa
-  cada ~2.5-3 días; umbral de 3 daría falsos vendidos). Bajarlo cuando el
-  Growth Check de eBay suba el límite de llamadas. NO abrir múltiples cuentas
+- **Carriles de rastreo** (aprobados 30 ago, sustituyen al ENDED_AFTER_DAYS=5
+  global): tracked_combos.priority lo recalcula refresh_yard_matches() cada
+  3h con el inventario vivo. Carril rápido = modelos con ≥5 carros vivos
+  entre ambas yardas (~7,095 combos, 135 llamadas/corrida, ciclo ~2.2 días,
+  ENDED_AFTER_DAYS_FAST=4). Carril lento = resto (~2,255 combos, 15
+  llamadas/corrida, ciclo ~6 días, ENDED_AFTER_DAYS_SLOW=10; no se eliminan
+  para conservar historial cuando llegue un carro de ese modelo). Umbral y
+  constantes en ebay-sync; bajar cuando el Growth Check suba el límite.
+  NO abrir múltiples cuentas
   de developer para dividir carga (viola políticas de eBay; riesgo de baneo).
 - Tiempo de manejo en listados: 2 días hábiles.
 

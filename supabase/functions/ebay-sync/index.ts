@@ -14,12 +14,20 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const BATCH_SIZE = 150;          // combos por corrida (150 × 24 corridas ≈ 3,600 llamadas/día, bajo el límite de 5,000)
+// Carriles de rastreo (aprobados por el dueño 30 ago 2026). priority la
+// mantiene refresh_yard_matches() cada 3h según el inventario real:
+//   1 = carril rápido: modelos con >= 5 carros vivos en las yardas
+//       (~7,095 combos → ciclo ~2.2 días)
+//   2 = carril lento: el resto (~2,255 combos → ciclo ~6 días)
+// 135 + 15 = 150 llamadas/corrida × 24 ≈ 3,600/día, bajo el límite de 5,000.
+const BATCH_FAST = 135;
+const BATCH_SLOW = 15;
 const RESULTS_PER_COMBO = 50;    // listados por consulta
-const ENDED_AFTER_DAYS = 5;      // no visto en N días => lo damos por vendido/terminado
-// 5 días aprobado por el dueño (30 ago 2026): con 9,350 combos y 3,600
-// llamadas/día cada combo se revisa cada ~2.5-3 días; un umbral de 3 daría
-// falsos "vendidos". Bajarlo de nuevo cuando el Growth Check suba el límite.
+// No visto en N días => vendido/terminado. Cada carril tolera ~2 barridos
+// perdidos (evita falsos "vendidos" por resultados inestables del search).
+// Bajar cuando el Growth Check suba el límite de llamadas.
+const ENDED_AFTER_DAYS_FAST = 4;
+const ENDED_AFTER_DAYS_SLOW = 10;
 const MIN_PRICE = 10;            // ignora listados de menos de $10 (no vale el esfuerzo)
 
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
@@ -54,6 +62,7 @@ async function getEbayToken(): Promise<string> {
 // ---------- Búsqueda de un combo ----------
 interface Combo {
   id: number;
+  priority: number;
   vehicles: { make: string; model: string; year_start: number; year_end: number };
   part_types: { search_keyword: string; ebay_category_id: string | null };
 }
@@ -106,7 +115,11 @@ async function searchCombo(token: string, combo: Combo) {
 }
 
 // ---------- Persistencia ----------
-async function persist(comboId: number, items: Awaited<ReturnType<typeof searchCombo>>) {
+async function persist(
+  comboId: number,
+  items: Awaited<ReturnType<typeof searchCombo>>,
+  endedAfterDays: number,
+) {
   const now = new Date().toISOString();
 
   if (items.length > 0) {
@@ -136,7 +149,7 @@ async function persist(comboId: number, items: Awaited<ReturnType<typeof searchC
   }
 
   // Lo que este combo tenía y ya no aparece hace N días => vendido/terminado
-  const cutoff = new Date(Date.now() - ENDED_AFTER_DAYS * 864e5).toISOString();
+  const cutoff = new Date(Date.now() - endedAfterDays * 864e5).toISOString();
   const { error: e3 } = await supabase
     .from("listings")
     .update({ ended_at: now })
@@ -158,22 +171,33 @@ Deno.serve(async () => {
   try {
     const token = await getEbayToken();
 
-    const { data: combos, error } = await supabase
-      .from("tracked_combos")
-      .select(
-        "id, vehicles(make, model, year_start, year_end), part_types(search_keyword, ebay_category_id)",
-      )
-      .eq("active", true)
-      .order("priority", { ascending: true })
-      .order("last_checked_at", { ascending: true, nullsFirst: true })
-      .limit(BATCH_SIZE);
-    if (error) throw error;
+    // Un lote por carril: el rápido no puede matar de hambre al lento
+    const pickLane = (pri: "fast" | "slow") => {
+      const q = supabase
+        .from("tracked_combos")
+        .select(
+          "id, priority, vehicles(make, model, year_start, year_end), part_types(search_keyword, ebay_category_id)",
+        )
+        .eq("active", true)
+        .order("last_checked_at", { ascending: true, nullsFirst: true });
+      return pri === "fast"
+        ? q.eq("priority", 1).limit(BATCH_FAST)
+        : q.gte("priority", 2).limit(BATCH_SLOW);
+    };
+    const [fast, slow] = await Promise.all([pickLane("fast"), pickLane("slow")]);
+    if (fast.error) throw fast.error;
+    if (slow.error) throw slow.error;
+    const combos = [...(fast.data ?? []), ...(slow.data ?? [])];
 
     let ok = 0, failed = 0;
-    for (const combo of (combos ?? []) as unknown as Combo[]) {
+    for (const combo of combos as unknown as Combo[]) {
       try {
         const items = await searchCombo(token, combo);
-        await persist(combo.id, items);
+        await persist(
+          combo.id,
+          items,
+          combo.priority === 1 ? ENDED_AFTER_DAYS_FAST : ENDED_AFTER_DAYS_SLOW,
+        );
         ok++;
       } catch (err) {
         console.error(`combo ${combo.id}:`, err);
