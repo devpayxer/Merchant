@@ -21,6 +21,7 @@ const state = {
   filterTop: "",           // filtro en vivo pestaña "Top"
   user: null,              // sesión del dueño (Supabase Auth)
   inv: null,               // filas de my_inventory
+  shipClasses: {},         // pieza -> clase de envío (S/M/L/XL)
   authMsg: "",
   pulled: new Set(),       // feedback visual de "la saqué" en esta sesión
   updatedAt: null,
@@ -54,6 +55,17 @@ function semClass(sem) {
   return "";
 }
 
+// Estrategia: listamos con ENVÍO GRATIS (como el 90% de la competencia,
+// y los precios medianos de eBay ya lo traen incluido). El costo estimado
+// de envío por clase de pieza se descuenta de la ganancia.
+const SHIP_COST = { S: 6, M: 13, L: 22, XL: 0 }; // XL = solo recogida local
+const PACKING_COST = 2;
+
+function shipCostFor(pieza) {
+  const cls = state.shipClasses[pieza];
+  return SHIP_COST[cls] ?? SHIP_COST.M;
+}
+
 // ---------- Datos ----------
 async function loadVehicles() {
   const { data, error } = await db
@@ -63,6 +75,11 @@ async function loadVehicles() {
     .order("label");
   if (error) throw error;
   state.vehicles = data;
+}
+
+async function loadShipClasses() {
+  const { data } = await db.from("part_types").select("name_es,ship_class");
+  for (const p of data ?? []) state.shipClasses[p.name_es] = p.ship_class;
 }
 
 async function loadUpdatedAt() {
@@ -464,7 +481,15 @@ function mioHTML() {
     .reduce((s, i) => s + Number(i.precio_venta ?? 0), 0);
   const ganancia = inv
     .filter((i) => i.estado === "vendida" || i.estado === "enviada")
-    .reduce((s, i) => s + Number(i.precio_venta ?? 0) * 0.85 - Number(i.costo ?? 0), 0);
+    .reduce(
+      (s, i) =>
+        s +
+        Number(i.precio_venta ?? 0) * 0.85 -
+        shipCostFor(i.pieza) -
+        PACKING_COST -
+        Number(i.costo ?? 0),
+      0,
+    );
 
   const items = inv
     .map((i) => {
@@ -498,7 +523,7 @@ function mioHTML() {
       <h2>📦 Mi inventario (${inv.length})</h2>
       <div class="rows">${items || `<div class="empty">Aún no has sacado piezas.<br>Busca un carro y toca "＋ La saqué".</div>`}</div>
     </section>
-    <div class="hint">La ganancia estimada descuenta ~15% de comisión de eBay.<br><button id="auth-out" class="linklike">Cerrar sesión</button></div>`;
+    <div class="hint">La ganancia descuenta ~15% de comisión de eBay,<br>el envío gratis que ofreces y el empaque.<br><button id="auth-out" class="linklike">Cerrar sesión</button></div>`;
 }
 
 function render() {
@@ -579,7 +604,7 @@ db.auth.onAuthStateChange((_event, session) => {
   const { data } = await db.auth.getSession().catch(() => ({ data: {} }));
   state.user = data?.session?.user ?? null;
   try {
-    await Promise.all([loadVehicles(), loadUpdatedAt()]);
+    await Promise.all([loadVehicles(), loadUpdatedAt(), loadShipClasses()]);
   } catch (e) {
     state.error = "No pude conectar. Revisa tu señal e intenta de nuevo.";
   }
