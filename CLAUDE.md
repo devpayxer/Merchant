@@ -69,9 +69,15 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 
 - 109 vehículos / ~6,000 combos (se agregaron europeos y los modelos reales
   del inventario de la yarda).
-- Inventario EN VIVO de la yarda Harry's U-Pull It (Hazle Township) scrapeado
-  de wegotused.com vía el proxy `/api/yard` en Pages (Sucuri bloquea IPs de
-  Supabase; el proxy vive en `web/public/_worker.js`). Cron `yard-sync-3h`.
+- Inventario EN VIVO de DOS yardas, cron `yard-sync-3h`:
+  1. Harry's U-Pull It (Hazle Township): scrapeado de wegotused.com vía el
+     proxy `/api/yard` en Pages (Sucuri bloquea IPs de Supabase; el proxy
+     vive en `web/public/_worker.js`). Con VINs.
+  2. EZ Pull & Save (New Ringgold, PA, a 40 min, más barata): JSON directo de
+     ezpullandsave.com/get_inventory.php (2,012 carros, fila y fecha, SIN
+     VINs — id sintético EZ-<hash>). $2 entrada, CASH ONLY. PENDIENTE: su
+     lista de precios (el usuario la fotografiará) → soporte multi-yarda en
+     yard_prices; mientras tanto la ganancia usa precios de Harry's.
 - VIN decodificado con NHTSA vPIC (modelo real, trim, motor, HP) + códigos de
   chasis/motor derivados para BMW/Mini/Mercedes (tablas en yard-sync).
 - Pestaña "Mío": inventario propio con login (a.ledesma@payxer.com), estados
