@@ -57,3 +57,71 @@ Crea `web/` en este repo y deploya a Cloudflare Pages. El usuario la abrirá des
 - Presupuesto de API: máximo ~3,600 llamadas/día a eBay (límite real: 5,000). Si cambias `BATCH_SIZE` o la frecuencia del cron, recalcula.
 - No cambies la lógica de `ENDED_AFTER_DAYS` ni el cálculo de vendidos sin consultarlo: es la métrica central del negocio.
 - El service role key nunca va en el código del frontend; la web usa solo la anon key.
+
+---
+
+## ESTADO Y PENDIENTES (actualizado 30 ago 2026 — leer antes de continuar)
+
+Las Fases 1 y 2 están COMPLETAS y desplegadas. Proyecto Supabase: `ebay-radar`
+(ref `oricrkqewpchixpxcayp`, cuenta nueva del usuario, NO la de tolatino).
+Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
+3483bb2e0e21546041283fd760c85538). Lo construido más allá del plan original:
+
+- 109 vehículos / ~6,000 combos (se agregaron europeos y los modelos reales
+  del inventario de la yarda).
+- Inventario EN VIVO de la yarda Harry's U-Pull It (Hazle Township) scrapeado
+  de wegotused.com vía el proxy `/api/yard` en Pages (Sucuri bloquea IPs de
+  Supabase; el proxy vive en `web/public/_worker.js`). Cron `yard-sync-3h`.
+- VIN decodificado con NHTSA vPIC (modelo real, trim, motor, HP) + códigos de
+  chasis/motor derivados para BMW/Mini/Mercedes (tablas en yard-sync).
+- Pestaña "Mío": inventario propio con login (a.ledesma@payxer.com), estados
+  bodega→listada→vendida→enviada y ganancia neta.
+- Fotos/links de eBay por pieza: soporte listo, se llenan al activar eBay.
+
+### Decisiones de negocio tomadas (no cambiar sin preguntar)
+
+- **Envío GRATIS en todos los listados** (los comps lo incluyen en el precio).
+  Ganancia neta = precio × 0.85 (comisión) − envío por clase (S $6 / M $13 /
+  L $22) − $2 empaque − costo de yarda. XL = solo recogida local, no listar.
+- Precio de publicación sugerido: 10-15% bajo la mediana.
+- Tiempo de manejo en listados: 2 días hábiles.
+
+### Pendiente 1 — Al llegar las llaves de eBay (aprobación en curso)
+
+1. `supabase secrets set EBAY_CLIENT_ID=... EBAY_CLIENT_SECRET=...`
+2. Invocar `ebay-sync` a mano; verificar listings/snapshots/fotos.
+3. Programar cron horario de ebay-sync (README sección 4, con la anon key).
+4. **Botón "🔍 Espiar mercado"** (acordado con el usuario, prioridad alta):
+   al tocar una pieza, traer con Browse API `getItem` el detalle de los 5-10
+   listados activos más baratos: **watchCount** (= clientes que lo guardaron)
+   y **estimatedSoldQuantity** (ventas reales en listados multi-cantidad).
+   Caché de 24h en una tabla para cuidar presupuesto (~300 llamadas/día máx;
+   usamos 3,600 de 5,000). OJO: verificar con una llamada real que la versión
+   actual de Browse API devuelva `watchCount`; si no, plan B documentado en
+   la conversación (contador de vendidos + link al listado).
+
+### Pendiente 2 — Lista de precios de la yarda (el usuario la va a traer)
+
+Crear tabla `yard_prices` (pieza → precio de la yarda), cargarla, y:
+- Mostrar en TODAS las piezas: "Yarda $X → eBay $Y" + ganancia neta grande +
+  etiqueta de rentabilidad (verde ≥$40 / naranja $15-40 / gris "NO VALE").
+- Reordenar hot_list por ganancia neta.
+- Autollenar `costo` al tocar "＋ La saqué" (ya no preguntar con prompt).
+- Preguntar al usuario si la yarda cobra cuota de entrada para sumarla.
+
+### Pendiente 3 — Fase B del inventario: borradores de listado
+
+Al marcar pieza "en bodega", generar borrador copiable: título con specs del
+VIN ("11 BMW 328i E90 N52 Right Headlight OEM"), precio sugerido, categoría,
+condición, compatibilidad. El usuario publica manual desde la app de eBay
+(cuenta nueva tiene límites ~10 items/$500 al mes; Fase C de Sell APIs
+esperará a que haya historial de ventas).
+
+### Otras notas operativas
+
+- Tokens de esta infra: Supabase access token y Cloudflare API token los
+  tiene el usuario; pedírselos si la sesión no los tiene.
+- Terapeak (gratis en Seller Hub cuando haya cuenta de vendedor) para validar
+  nichos manualmente; no tiene API.
+- Rediseño UI/UX: hay lienzo en Claude Design y prompt preparado; si el
+  usuario trae un diseño final, implementarlo sin perder funcionalidad.
