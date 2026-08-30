@@ -124,6 +124,26 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
    es chapa ya pintada del color: le ahorra $150-250 de pintura al comprador).
    Mismo filtro de búsqueda con conditions:{NEW}, misma caché 24h, sin costo
    extra significativo de API.
+   **Diseño ampliado — "Índice de demanda" (30 ago, acordado con el usuario):**
+   generalizar la señal aftermarket a TODOS los vendedores por combo, no un
+   listado suelto, y fundirla con las métricas de usados existentes:
+   - Nueva pasada `demand-sync` (o dentro de ebay-sync): por combo, 1 search
+     con conditions:{NEW} + getItem de los top 3-5 aftermarket por ventas.
+   - Tablas: `aftermarket_stats` (combo_id, vendedores, precio_min_nuevo,
+     ventas_totales, watchers_totales, updated_at) y
+     `aftermarket_snapshots` (item_id, sold_qty, watchers, fecha).
+     CLAVE: estimatedSoldQuantity es acumulado de por vida; el snapshot
+     semanal da el DELTA = ventas reales/semana de todo el mercado. Esa es
+     la métrica buena, no el acumulado.
+   - Índice de demanda 0-100 por combo fundiendo: velocidad aftermarket
+     (delta semanal), watchers/vendedor, vendidos_30d usados, e inversa de
+     competencia usada. Semáforo v2: 🟢 venta casi segura / 🟡 demanda alta
+     pero precio agresivo / ⚪ sin señal. precio_min aftermarket = techo de
+     publicación del OEM usado.
+   - Presupuesto: SOLO combos con carros vivos en las yardas (accionables),
+     top 3-5 listados, refresh semanal ≈ 1,000-1,300 llamadas/día — cabe en
+     el slack de 1,400 (usamos 3,600 de 5,000). Ampliar a todos los combos
+     cuando el Growth Check suba el límite.
 
 ### Pendiente 2 — Lista de precios de la yarda — ✅ COMPLETADO 30 ago 2026
 
