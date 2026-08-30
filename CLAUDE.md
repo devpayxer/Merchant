@@ -115,6 +115,15 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
    usamos 3,600 de 5,000). OJO: verificar con una llamada real que la versión
    actual de Browse API devuelva `watchCount`; si no, plan B documentado en
    la conversación (contador de vendidos + link al listado).
+   **Ampliación acordada (30 ago, idea del usuario):** la misma consulta trae
+   DOS grupos por pieza: (a) usados más baratos = competencia directa, y
+   (b) aftermarket NUEVOS más vendidos = termómetro de demanda. Los listados
+   aftermarket son multi-cantidad y exponen públicamente sold count, watchers
+   y "in N carts" — señal de demanda que los usados no enseñan. El precio
+   aftermarket marca el techo; el OEM usado se publica debajo (o igual/más si
+   es chapa ya pintada del color: le ahorra $150-250 de pintura al comprador).
+   Mismo filtro de búsqueda con conditions:{NEW}, misma caché 24h, sin costo
+   extra significativo de API.
 
 ### Pendiente 2 — Lista de precios de la yarda — ✅ COMPLETADO 30 ago 2026
 
