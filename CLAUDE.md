@@ -103,9 +103,13 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
    actual de Browse API devuelva `watchCount`; si no, plan B documentado en
    la conversación (contador de vendidos + link al listado).
 
-### Pendiente 2 — Lista de precios de la yarda (el usuario la va a traer)
+### Pendiente 2 — Lista de precios de la yarda — ✅ COMPLETADO 30 ago 2026
 
-Crear tabla `yard_prices` (pieza → precio de la yarda), cargarla, y:
+Tabla `yard_prices` cargada con los 55 precios de la lista impresa de Harry's
+(price + core, notas de mapeo por fila). hot_list calcula ganancia_neta y
+rentabilidad; la web muestra "Yarda $X → eBay $Y" y autollena el costo en
+"La saqué". FALTA: confirmar con el usuario cuota de entrada y sales tax de PA.
+Lo original pedido era:
 - Mostrar en TODAS las piezas: "Yarda $X → eBay $Y" + ganancia neta grande +
   etiqueta de rentabilidad (verde ≥$40 / naranja $15-40 / gris "NO VALE").
 - Reordenar hot_list por ganancia neta.

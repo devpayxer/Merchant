@@ -97,6 +97,7 @@ async function loadHotList(label) {
     .from("hot_list")
     .select("*")
     .eq("vehiculo", label)
+    .order("ganancia_neta", { ascending: false, nullsFirst: false })
     .order("score", { ascending: false });
   if (error) throw error;
   state.lists[label] = data;
@@ -125,6 +126,7 @@ async function loadTop() {
   const { data, error } = await db
     .from("hot_list")
     .select("*")
+    .order("ganancia_neta", { ascending: false, nullsFirst: false })
     .order("score", { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -194,15 +196,20 @@ async function logout() {
 }
 
 async function pullPart(payload) {
-  const costoStr = prompt(`¿Cuánto pagaste por "${payload.pieza}" en la yarda? (deja vacío si no sabes)`);
-  if (costoStr === null) return; // canceló
-  const costo = costoStr.trim() === "" ? null : Number(costoStr.replace(/[^0-9.]/g, ""));
+  // Con la lista de precios cargada el costo se llena solo; si no, se pregunta
+  let costo = payload.costo != null ? Number(payload.costo) : null;
+  if (costo == null) {
+    const costoStr = prompt(`¿Cuánto pagaste por "${payload.pieza}" en la yarda? (deja vacío si no sabes)`);
+    if (costoStr === null) return; // canceló
+    const n = Number(costoStr.replace(/[^0-9.]/g, ""));
+    costo = costoStr.trim() !== "" && Number.isFinite(n) ? n : null;
+  }
   const { error } = await db.from("my_inventory").insert({
     vehiculo: payload.vehiculo,
     pieza: payload.pieza,
     vin: payload.vin ?? null,
     fila: payload.fila ?? null,
-    costo: Number.isFinite(costo) ? costo : null,
+    costo,
     precio_mercado: payload.precio ?? null,
   });
   if (error) {
@@ -276,12 +283,35 @@ function rowHTML(r, showVehiculo = false, car = null) {
         vehiculo: r.vehiculo,
         pieza: r.pieza,
         precio: r.precio_objetivo ?? null,
+        costo: r.costo_yarda ?? null,
         vin: car?.vin ?? null,
         fila: car?.row_number ?? null,
       }));
       pullBtn = `<button class="pull-btn" data-pull="${payload}">＋ La saqué</button>`;
     }
   }
+
+  // Línea de precios: "Yarda $42 → eBay $95"
+  let precios = "";
+  if (r.costo_yarda != null) {
+    precios = `<div class="precios"><span class="yarda">Yarda ${money(Math.round(r.costo_yarda))}</span>${
+      r.precio_objetivo != null ? ` → <span class="ebay">eBay ${money(r.precio_objetivo)}</span>` : ""
+    }</div>`;
+  }
+
+  // Lado derecho: ganancia neta cuando existe; si no, el precio de eBay
+  let derecha;
+  if (r.ganancia_neta != null) {
+    const g = Number(r.ganancia_neta);
+    const tag =
+      r.rentabilidad === "alta" ? `<div class="gan-tag alta">SÁCALA</div>` :
+      r.rentabilidad === "media" ? `<div class="gan-tag media">REGULAR</div>` :
+      `<div class="gan-tag baja">NO VALE</div>`;
+    derecha = `<div class="gan"><div class="gan-num ${g < 15 ? "baja" : ""}">${g >= 0 ? "+" : "−"}$${Math.abs(g)}</div>${tag}</div>`;
+  } else {
+    derecha = `<div class="precio">${money(r.precio_objetivo)}</div>`;
+  }
+
   return `
     <div class="row">
       ${r.foto ? `<img class="thumb" src="${r.foto}" loading="lazy" alt="">` : ""}
@@ -292,9 +322,10 @@ function rowHTML(r, showVehiculo = false, car = null) {
           · ${r.vendidos_30d ?? 0} vendidos/30d
           · ${r.competencia ?? 0} compitiendo${link}
         </div>
+        ${precios}
         ${pullBtn}
       </div>
-      <div class="precio">${money(r.precio_objetivo)}</div>
+      ${derecha}
     </div>`;
 }
 
