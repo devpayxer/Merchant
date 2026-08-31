@@ -115,7 +115,17 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   de developer para dividir carga (viola políticas de eBay; riesgo de baneo).
 - Tiempo de manejo en listados: 2 días hábiles.
 
-### Pendiente 1 — Al llegar las llaves de eBay (aprobación en curso)
+### Pendiente 1 — Al llegar las llaves de eBay (⚠️ registro RECHAZADO, apelación en curso)
+
+ESTADO 31 ago 2026: el registro del Developers Program (a.ledesma@payxer.com)
+fue RECHAZADO ("problems with the data provided or other irregularities")
+pese a ser el mismo correo de la cuenta de comprador henrledesm3 (miembro
+desde nov 2016, 100% feedback, datos verificados correctos) — falso positivo
+del antifraude. El formulario de soporte requiere login de developer (el
+rechazado), así que la apelación va por el foro community.ebay.com → "eBay
+APIs" posteando desde henrledesm3 (post redactado y entregado al usuario
+31 ago). NO re-registrarse con otros datos salvo que Developer Support lo
+indique. Cuando aprueben, ejecutar los pasos de abajo.
 
 1. `supabase secrets set EBAY_CLIENT_ID=... EBAY_CLIENT_SECRET=...`
 2. Invocar `ebay-sync` a mano; verificar listings/snapshots/fotos.
