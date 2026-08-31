@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import "./style.css";
+import { translate, translateNote } from "./i18n.js";
 
 // La anon key es pública por diseño; RLS solo permite SELECT.
 const SUPABASE_URL = "https://oricrkqewpchixpxcayp.supabase.co";
@@ -9,7 +10,17 @@ const SUPABASE_ANON_KEY =
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 
+// Idioma: recuerda la elección; si es la primera vez, sigue al teléfono
+function langInicial() {
+  try {
+    const guardado = localStorage.getItem("lang");
+    if (guardado === "es" || guardado === "en") return guardado;
+  } catch { /* modo privado */ }
+  return (navigator.language || "es").toLowerCase().startsWith("en") ? "en" : "es";
+}
+
 const state = {
+  lang: langInicial(),
   tab: "yarda",            // "yarda" | "hoy" | "top"
   vehicles: [],            // [{id, label}]
   selected: [],            // labels elegidos
@@ -33,18 +44,45 @@ const state = {
 };
 
 const app = document.getElementById("app");
+document.documentElement.lang = state.lang;
+
+// ---------- Idioma ----------
+function t(key, vars) {
+  return translate(state.lang, key, vars);
+}
+
+// Nombre de pieza: en español el de la base; en inglés se deriva del
+// search_keyword que ya usamos para buscar en eBay ("right headlight
+// assembly OEM" -> "Right Headlight Assembly").
+function partName(pieza) {
+  if (state.lang !== "en") return pieza;
+  const kw = state.partKeywords?.[pieza];
+  if (!kw) return pieza;
+  return kw.replace(/\s*OEM\s*$/i, "").replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+function tNota(nota) {
+  return translateNote(state.lang, nota);
+}
+
+function setLang(lang) {
+  state.lang = lang;
+  try { localStorage.setItem("lang", lang); } catch { /* modo privado */ }
+  document.documentElement.lang = lang;
+  render();
+}
 
 // ---------- Utilidades ----------
 const norm = (s) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 function hoursAgoText(iso) {
-  if (!iso) return "sin datos todavía";
+  if (!iso) return t("sin datos todavía");
   const h = Math.floor((Date.now() - new Date(iso).getTime()) / 36e5);
-  if (h < 1) return "actualizado hace menos de 1 hora";
-  if (h === 1) return "actualizado hace 1 hora";
-  if (h < 48) return `actualizado hace ${h} horas`;
-  return `actualizado hace ${Math.floor(h / 24)} días`;
+  if (h < 1) return t("actualizado hace menos de 1 hora");
+  if (h === 1) return t("actualizado hace 1 hora");
+  if (h < 48) return t("actualizado hace {n} horas", { n: h });
+  return t("actualizado hace {n} días", { n: Math.floor(h / 24) });
 }
 
 function money(v) {
@@ -173,7 +211,7 @@ async function selectVehicle(label) {
     try {
       await loadHotList(label);
     } catch (e) {
-      state.error = "No pude cargar los datos. Revisa tu señal.";
+      state.error = t("No pude cargar los datos. Revisa tu señal.");
     }
     render();
   } else {
@@ -209,7 +247,7 @@ async function switchTab(tab) {
       render();
     }
   } catch (e) {
-    state.error = "No pude cargar los datos. Revisa tu señal.";
+    state.error = t("No pude cargar los datos. Revisa tu señal.");
     render();
   }
 }
@@ -219,7 +257,7 @@ async function login(email, password) {
   state.authMsg = "";
   const { error } = await db.auth.signInWithPassword({ email, password });
   if (error) {
-    state.authMsg = "Correo o contraseña incorrectos.";
+    state.authMsg = t("Correo o contraseña incorrectos.");
     render();
   }
 }
@@ -234,7 +272,7 @@ async function pullPart(payload) {
   // Con la lista de precios cargada el costo se llena solo; si no, se pregunta
   let costo = payload.costo != null ? Number(payload.costo) : null;
   if (costo == null) {
-    const costoStr = prompt(`¿Cuánto pagaste por "${payload.pieza}" en la yarda? (deja vacío si no sabes)`);
+    const costoStr = prompt(t('¿Cuánto pagaste por "{pieza}" en la yarda? (deja vacío si no sabes)', { pieza: partName(payload.pieza) }));
     if (costoStr === null) return; // canceló
     const n = Number(costoStr.replace(/[^0-9.]/g, ""));
     costo = costoStr.trim() !== "" && Number.isFinite(n) ? n : null;
@@ -248,7 +286,7 @@ async function pullPart(payload) {
     precio_mercado: payload.precio ?? null,
   });
   if (error) {
-    state.error = "No pude guardar. ¿Sigues con sesión iniciada?";
+    state.error = t("No pude guardar. ¿Sigues con sesión iniciada?");
   } else {
     state.pulled.add(payload.key);
     state.inv = null; // recargar la próxima vez
@@ -259,13 +297,13 @@ async function pullPart(payload) {
 async function advanceEstado(id, estado) {
   const patch = { updated_at: new Date().toISOString() };
   if (estado === "bodega") {
-    const p = prompt("¿En cuánto la listaste en eBay? (opcional)");
+    const p = prompt(t("¿En cuánto la listaste en eBay? (opcional)"));
     if (p === null) return;
     patch.estado = "listada";
     const n = Number(p.replace(/[^0-9.]/g, ""));
     if (p.trim() && Number.isFinite(n)) patch.precio_listado = n;
   } else if (estado === "listada") {
-    const p = prompt("¿En cuánto se vendió?");
+    const p = prompt(t("¿En cuánto se vendió?"));
     if (p === null) return;
     patch.estado = "vendida";
     const n = Number(p.replace(/[^0-9.]/g, ""));
@@ -282,7 +320,7 @@ async function advanceEstado(id, estado) {
 }
 
 async function deleteInv(id) {
-  if (!confirm("¿Borrar esta pieza de tu inventario?")) return;
+  if (!confirm(t("¿Borrar esta pieza de tu inventario?"))) return;
   const { error } = await db.from("my_inventory").delete().eq("id", id);
   if (error) state.error = "No pude borrar.";
   else await loadInv().catch(() => {});
@@ -296,7 +334,7 @@ async function toggleCar(vin, label) {
     try {
       await loadHotList(label);
     } catch (e) {
-      state.error = "No pude cargar los datos. Revisa tu señal.";
+      state.error = t("No pude cargar los datos. Revisa tu señal.");
     }
     render();
   }
@@ -315,16 +353,16 @@ function soldUrl(r) {
 
 function rowHTML(r, showVehiculo = false, car = null) {
   const soldLink = r.keyword
-    ? ` · <a href="${soldUrl(r)}" target="_blank" rel="noopener">💰 vendidos ↗</a>`
+    ? ` · <a href="${soldUrl(r)}" target="_blank" rel="noopener">${t("💰 vendidos ↗")}</a>`
     : "";
   const link = r.ebay_url
-    ? ` · <a href="${r.ebay_url}" target="_blank" rel="noopener">ver en eBay ↗</a>`
+    ? ` · <a href="${r.ebay_url}" target="_blank" rel="noopener">${t("ver en eBay ↗")}</a>`
     : "";
   let pullBtn = "";
   if (state.user) {
     const key = `${r.vehiculo}|${r.pieza}|${car?.vin ?? ""}`;
     if (state.pulled.has(key)) {
-      pullBtn = `<div class="pull-done">✓ En tu inventario</div>`;
+      pullBtn = `<div class="pull-done">${t("✓ En tu inventario")}</div>`;
     } else {
       const yCtx = car?.yard ?? state.yardFilter;
       const costoPull = yCtx === "EZ PULL" ? r.costo_ez
@@ -339,7 +377,7 @@ function rowHTML(r, showVehiculo = false, car = null) {
         vin: car?.vin ?? null,
         fila: car?.row_number ?? null,
       }));
-      pullBtn = `<button class="pull-btn" data-pull="${payload}">＋ La saqué</button>`;
+      pullBtn = `<button class="pull-btn" data-pull="${payload}">${t("＋ La saqué")}</button>`;
     }
   }
 
@@ -372,10 +410,10 @@ function rowHTML(r, showVehiculo = false, car = null) {
   if (sel.gan != null) {
     const g = Number(sel.gan);
     const tag =
-      sel.rent === "alta" ? `<div class="gan-tag alta">SÁCALA</div>` :
-      sel.rent === "media" ? `<div class="gan-tag media">REGULAR</div>` :
-      `<div class="gan-tag baja">NO VALE</div>`;
-    const enYarda = comparando ? `<div class="gan-yard">en ${sel.nombre}</div>` : "";
+      sel.rent === "alta" ? `<div class="gan-tag alta">${t("SÁCALA")}</div>` :
+      sel.rent === "media" ? `<div class="gan-tag media">${t("REGULAR")}</div>` :
+      `<div class="gan-tag baja">${t("NO VALE")}</div>`;
+    const enYarda = comparando ? `<div class="gan-yard">${t("en {yarda}", { yarda: sel.nombre })}</div>` : "";
     derecha = `<div class="gan"><div class="gan-num ${g < 15 ? "baja" : ""}">${g >= 0 ? "+" : "−"}$${Math.abs(g)}</div>${tag}${enYarda}</div>`;
   } else {
     derecha = `<div class="precio">${money(r.precio_objetivo)}</div>`;
@@ -385,11 +423,11 @@ function rowHTML(r, showVehiculo = false, car = null) {
     <div class="row">
       ${r.foto ? `<img class="thumb" src="${r.foto}" loading="lazy" alt="">` : ""}
       <div class="rowbody">
-        <div class="pieza">${r.pieza}${showVehiculo ? ` <span class="meta">· ${r.vehiculo}</span>` : ""}</div>
+        <div class="pieza">${partName(r.pieza)}${showVehiculo ? ` <span class="meta">· ${r.vehiculo}</span>` : ""}</div>
         <div class="meta">
-          <span class="sem ${semClass(r.semaforo)}">${r.semaforo ?? ""}</span>
-          · ${r.vendidos_30d ?? 0} vendidos/30d
-          · ${r.competencia ?? 0} compitiendo${soldLink}${link}
+          <span class="sem ${semClass(r.semaforo)}">${t(r.semaforo ?? "")}</span>
+          · ${t("{n} vendidos/30d", { n: r.vendidos_30d ?? 0 })}
+          · ${t("{n} compitiendo", { n: r.competencia ?? 0 })}${soldLink}${link}
         </div>
         ${precios}
         ${pullBtn}
@@ -403,7 +441,7 @@ function yardChipsHTML() {
     `<button class="yard-chip ${state.yardFilter === val ? "on" : ""}" data-yard="${val}">${label}</button>`;
   return `
     <div class="yard-chips">
-      ${chip("all", "Todas")}
+      ${chip("all", t("Todas"))}
       ${chip("HAZLE TOWNSHIP", "Harry's")}
       ${chip("EZ PULL", "EZ Pull")}
     </div>`;
@@ -449,8 +487,8 @@ function yardaHTML() {
     .map((l) => {
       const rows = state.lists[l];
       let body;
-      if (rows === undefined) body = `<div class="loading">Cargando…</div>`;
-      else if (rows.length === 0) body = `<div class="empty">Sin datos para este vehículo</div>`;
+      if (rows === undefined) body = `<div class="loading">${t("Cargando…")}</div>`;
+      else if (rows.length === 0) body = `<div class="empty">${t("Sin datos para este vehículo")}</div>`;
       else body = rows.map((r) => rowHTML(r)).join("");
       return `
         <section class="vehicle-block">
@@ -464,7 +502,7 @@ function yardaHTML() {
     ${yardChipsHTML()}
     <div class="search-box">
       <input id="search" type="text" inputmode="search" autocomplete="off"
-        placeholder="🔎 Busca el carro (ej. Civic)" value="${state.query}" />
+        placeholder="${t("🔎 Busca el carro (ej. Civic)")}" value="${state.query}" />
       ${
         matches.length
           ? `<div class="suggestions">${matches
@@ -477,21 +515,21 @@ function yardaHTML() {
     ${
       state.selected.length
         ? blocks
-        : `<div class="hint">Escribe el carro que ves en la yarda.<br>Puedes elegir varios a la vez.</div>`
+        : `<div class="hint">${t("Escribe el carro que ves en la yarda.")}<br>${t("Puedes elegir varios a la vez.")}</div>`
     }`;
 }
 
 function daysInYard(iso) {
   if (!iso) return "";
   const d = Math.floor((Date.now() - new Date(iso + "T12:00:00").getTime()) / 864e5);
-  if (d <= 0) return "llegó hoy";
-  if (d === 1) return "llegó ayer";
-  return `llegó hace ${d} días`;
+  if (d <= 0) return t("llegó hoy");
+  if (d === 1) return t("llegó ayer");
+  return t("llegó hace {n} días", { n: d });
 }
 
 function hoyHTML() {
-  if (state.yardCars === null) return `<div class="loading">Cargando inventario de la yarda…</div>`;
-  if (state.yardCars.length === 0) return `<div class="empty">Ningún carro de la yarda coincide con el radar todavía</div>`;
+  if (state.yardCars === null) return `<div class="loading">${t("Cargando inventario de la yarda…")}</div>`;
+  if (state.yardCars.length === 0) return `<div class="empty">${t("Ningún carro de la yarda coincide con el radar todavía")}</div>`;
 
   const q = norm(state.filterHoy);
   const porYarda = state.yardFilter === "all"
@@ -518,8 +556,8 @@ function hoyHTML() {
       let detail = "";
       if (open) {
         const rows = state.lists[c.vehiculo];
-        if (rows === undefined) detail = `<div class="loading">Cargando piezas…</div>`;
-        else if (rows.length === 0) detail = `<div class="empty">Sin datos de piezas</div>`;
+        if (rows === undefined) detail = `<div class="loading">${t("Cargando piezas…")}</div>`;
+        else if (rows.length === 0) detail = `<div class="empty">${t("Sin datos de piezas")}</div>`;
         else detail = rows.map((r) => rowHTML(r, false, c)).join("");
       }
       return `
@@ -527,7 +565,7 @@ function hoyHTML() {
           <div class="row" data-car="${c.vin}" data-label="${c.vehiculo}" style="cursor:pointer;">
             <div class="rowbody">
               <div class="pieza">${isNew ? "🆕 " : ""}${titulo}</div>
-              <div class="meta">${state.yardFilter === "all" ? `<b>${c.yard === "EZ PULL" ? "EZ Pull" : "Harry's"}</b> · ` : ""}Fila ${c.row_number || "?"}${c.color ? ` · ${c.color}` : ""} · ${daysInYard(c.yard_date)}</div>
+              <div class="meta">${state.yardFilter === "all" ? `<b>${c.yard === "EZ PULL" ? "EZ Pull" : "Harry's"}</b> · ` : ""}${t("Fila {n}", { n: c.row_number || "?" })}${c.color ? ` · ${c.color}` : ""} · ${daysInYard(c.yard_date)}</div>
               ${specs ? `<div class="meta">${specs}</div>` : ""}
               ${open && !c.vin.startsWith("EZ-") ? `<div class="meta vin">VIN ${c.vin}</div>` : ""}
             </div>
@@ -540,30 +578,32 @@ function hoyHTML() {
 
   return `
     ${yardChipsHTML()}
-    ${filterInputHTML("filter-hoy", state.filterHoy, "🔎 Filtra: marca, modelo, año, fila…")}
+    ${filterInputHTML("filter-hoy", state.filterHoy, t("🔎 Filtra: marca, modelo, año, fila…"))}
     <section class="vehicle-block">
-      <h2>📍 En la yarda: ${cars.length}${q ? ` de ${porYarda.length}` : ""} carros del radar</h2>
-      <div style="padding:0;">${cards || `<div class="empty">Nada coincide con "${state.filterHoy}"</div>`}</div>
+      <h2>${q
+        ? t("📍 En la yarda: {n} de {total} carros del radar", { n: cars.length, total: porYarda.length })
+        : t("📍 En la yarda: {n} carros del radar", { n: cars.length })}</h2>
+      <div style="padding:0;">${cards || `<div class="empty">${t('Nada coincide con "{q}"', { q: state.filterHoy })}</div>`}</div>
     </section>
-    <div class="hint">Toca un carro para ver qué piezas sacarle.<br>🆕 = llegó esta semana (mejores piezas disponibles).</div>`;
+    <div class="hint">${t("Toca un carro para ver qué piezas sacarle.")}<br>${t("🆕 = llegó esta semana (mejores piezas disponibles).")}</div>`;
 }
 
 function topHTML() {
-  if (state.top === null) return `<div class="loading">Cargando…</div>`;
-  if (state.top.length === 0) return `<div class="empty">Aún no hay datos</div>`;
+  if (state.top === null) return `<div class="loading">${t("Cargando…")}</div>`;
+  if (state.top.length === 0) return `<div class="empty">${t("Aún no hay datos")}</div>`;
 
   const q = norm(state.filterTop);
   const rows = q
-    ? state.top.filter((r) => norm(`${r.pieza} ${r.vehiculo}`).includes(q))
+    ? state.top.filter((r) => norm(`${r.pieza} ${partName(r.pieza)} ${r.vehiculo}`).includes(q))
     : state.top;
 
   const blocks = rows.map((r) => rowHTML(r, true)).join("");
   return `
     ${yardChipsHTML()}
-    ${filterInputHTML("filter-top", state.filterTop, "🔎 Filtra: pieza o vehículo…")}
+    ${filterInputHTML("filter-top", state.filterTop, t("🔎 Filtra: pieza o vehículo…"))}
     <section class="vehicle-block">
-      <h2>🔥 Top 50 general</h2>
-      <div class="rows">${blocks || `<div class="empty">Nada coincide con "${state.filterTop}"</div>`}</div>
+      <h2>${t("🔥 Top 50 general")}</h2>
+      <div class="rows">${blocks || `<div class="empty">${t('Nada coincide con "{q}"', { q: state.filterTop })}</div>`}</div>
     </section>`;
 }
 
@@ -576,9 +616,9 @@ const ESTADOS = {
 
 function preciosHTML() {
   const chips = yardChipsHTML();
-  const buscador = filterInputHTML("filter-precios", state.filterPrecios, "🔎 Busca la pieza (ej. faro)");
+  const buscador = filterInputHTML("filter-precios", state.filterPrecios, t("🔎 Busca la pieza (ej. faro)"));
   if (state.prices === null) {
-    return `${chips}${buscador}<div class="loading">Cargando la lista de precios…</div>`;
+    return `${chips}${buscador}<div class="loading">${t("Cargando la lista de precios…")}</div>`;
   }
 
   // Una fila por pieza, con el precio de cada yarda al lado
@@ -590,11 +630,13 @@ function preciosHTML() {
   }
 
   const q = norm(state.filterPrecios);
-  let filas = [...porPieza.values()];
+  let filas = [...porPieza.values()].sort((a, b) =>
+    partName(a.pieza).localeCompare(partName(b.pieza), state.lang));
   if (q) {
     filas = filas.filter(
       (f) =>
         norm(f.pieza).includes(q) ||
+        norm(partName(f.pieza)).includes(q) ||
         norm(f.harrys?.nota ?? "").includes(q) ||
         norm(f.ez?.nota ?? "").includes(q),
     );
@@ -619,8 +661,8 @@ function preciosHTML() {
       // La nota es el nombre exacto de la fila en la lista impresa; en modo
       // comparar se marca de qué yarda viene (a veces difieren, ej. alternador)
       const notas = [];
-      if (verHarrys && f.harrys?.nota) notas.push({ y: "Harry's", t: f.harrys.nota });
-      if (verEz && f.ez?.nota && f.ez.nota !== f.harrys?.nota) notas.push({ y: "EZ", t: f.ez.nota });
+      if (verHarrys && f.harrys?.nota) notas.push({ y: "Harry's", t: tNota(f.harrys.nota) });
+      if (verEz && f.ez?.nota && f.ez.nota !== f.harrys?.nota) notas.push({ y: "EZ", t: tNota(f.ez.nota) });
       const comparando2 = verHarrys && verEz;
       const nota = notas
         .map((n) => (comparando2 && notas.length > 1 ? `<b>${n.y}:</b> ${n.t}` : n.t))
@@ -628,7 +670,7 @@ function preciosHTML() {
       return `
       <div class="prow">
         <div class="pinfo">
-          <div class="pieza">${f.pieza}${f.ship ? ` <span class="ship-tag">${f.ship}</span>` : ""}</div>
+          <div class="pieza">${partName(f.pieza)}${f.ship ? ` <span class="ship-tag">${f.ship}</span>` : ""}</div>
           ${nota ? `<div class="pnota">${nota}</div>` : ""}
         </div>
         ${celda(f.harrys, verHarrys)}
@@ -639,7 +681,7 @@ function preciosHTML() {
 
   const encabezado = `
     <div class="phead">
-      <div class="pinfo">Pieza</div>
+      <div class="pinfo">${t("Pieza")}</div>
       ${verHarrys ? `<div class="pcol">Harry's</div>` : ""}
       ${verEz ? `<div class="pcol">EZ Pull</div>` : ""}
     </div>`;
@@ -648,13 +690,13 @@ function preciosHTML() {
     ${chips}
     ${buscador}
     <section class="vehicle-block">
-      <h2>💲 Precios de yarda (${filas.length})</h2>
+      <h2>${t("💲 Precios de yarda ({n})", { n: filas.length })}</h2>
       <div class="rows">
         ${encabezado}
-        ${items || `<div class="empty">Ninguna pieza con ese nombre.</div>`}
+        ${items || `<div class="empty">${t("Ninguna pieza con ese nombre.")}</div>`}
       </div>
     </section>
-    <div class="hint">El número grande es lo que pagas en caja: precio + core + 6% de tax de PA.<br>Abajo en chico va el precio de lista.<br>Recuerda los $2 de entrada por visita.</div>`;
+    <div class="hint">${t("El número grande es lo que pagas en caja: precio + core + 6% de tax de PA.")}<br>${t("Abajo en chico va el precio de lista.")}<br>${t("Recuerda los $2 de entrada por visita.")}</div>`;
 }
 
 // ---------- Fase B: borrador de listado copiable ----------
@@ -719,13 +761,15 @@ function draftHTML(i) {
   const sold = kw ? soldUrl({ vehiculo: i.vehiculo, keyword: kw }) : null;
   return `
     <div class="draft">
-      <div class="draft-label">Título (${draft.title.length}/80)
-        <button class="copy-mini" data-copia="${encodeURIComponent(draft.title)}">Copiar</button></div>
+      <div class="draft-label">${t("Título ({n}/80)", { n: draft.title.length })}
+        <button class="copy-mini" data-copia="${encodeURIComponent(draft.title)}">${t("Copiar")}</button></div>
       <div class="draft-text">${draft.title}</div>
-      <div class="draft-label">Descripción
-        <button class="copy-mini" data-copia="${encodeURIComponent(draft.desc)}">Copiar</button></div>
+      <div class="draft-label">${t("Descripción")}
+        <button class="copy-mini" data-copia="${encodeURIComponent(draft.desc)}">${t("Copiar")}</button></div>
       <div class="draft-text">${draft.desc.replace(/\n/g, "<br>")}</div>
-      <div class="draft-hint">Precio: mira los ${sold ? `<a href="${sold}" target="_blank" rel="noopener">💰 vendidos ↗</a>` : "vendidos"} y publícate 10-15% abajo del típico. Tip: en eBay busca un VENDIDO igual y usa "Sell one like this" — clona categoría y specifics.</div>
+      <div class="draft-hint">${t("Precio: mira los {link} y publícate 10-15% abajo del típico.", {
+        link: sold ? `<a href="${sold}" target="_blank" rel="noopener">${t("💰 vendidos ↗")}</a>` : t("vendidos"),
+      })} ${t('Tip: en eBay busca un VENDIDO igual y usa "Sell one like this" — clona categoría y specifics.')}</div>
     </div>`;
 }
 
@@ -733,17 +777,17 @@ function mioHTML() {
   if (!state.user) {
     return `
       <section class="vehicle-block">
-        <h2>📦 Mi inventario</h2>
+        <h2>${t("📦 Mi inventario")}</h2>
         <div class="rows" style="padding:16px;">
-          <p style="margin-bottom:12px;">Inicia sesión para manejar tus piezas.</p>
+          <p style="margin-bottom:12px;">${t("Inicia sesión para manejar tus piezas.")}</p>
           <input id="auth-email" type="email" class="auth-input" value="a.ledesma@payxer.com" autocomplete="username" />
-          <input id="auth-pass" type="password" class="auth-input" placeholder="Contraseña" autocomplete="current-password" />
-          <button id="auth-btn" class="big-btn">Entrar</button>
+          <input id="auth-pass" type="password" class="auth-input" placeholder="${t("Contraseña")}" autocomplete="current-password" />
+          <button id="auth-btn" class="big-btn">${t("Entrar")}</button>
           ${state.authMsg ? `<p class="error" style="padding:10px 0;">${state.authMsg}</p>` : ""}
         </div>
       </section>`;
   }
-  if (state.inv === null) return `<div class="loading">Cargando tu inventario…</div>`;
+  if (state.inv === null) return `<div class="loading">${t("Cargando tu inventario…")}</div>`;
 
   const inv = state.inv;
   const n = (est) => inv.filter((i) => i.estado === est).length;
@@ -769,17 +813,17 @@ function mioHTML() {
       return `
       <div class="row">
         <div class="rowbody">
-          <div class="pieza">${i.pieza} <span class="meta">· ${i.vehiculo}</span></div>
+          <div class="pieza">${partName(i.pieza)} <span class="meta">· ${i.vehiculo}</span></div>
           <div class="meta">
-            ${e.label}
-            ${i.fila ? ` · Fila ${i.fila}` : ""}
-            ${i.costo != null ? ` · costo ${money(i.costo)}` : ""}
-            ${i.precio_venta != null ? ` · vendida en ${money(i.precio_venta)}` : i.precio_listado != null ? ` · listada en ${money(i.precio_listado)}` : i.precio_mercado != null ? ` · mercado ${money(i.precio_mercado)}` : ""}
+            ${t(e.label)}
+            ${i.fila ? ` · ${t("Fila {n}", { n: i.fila })}` : ""}
+            ${i.costo != null ? ` · ${t("costo {v}", { v: money(i.costo) })}` : ""}
+            ${i.precio_venta != null ? ` · ${t("vendida en {v}", { v: money(i.precio_venta) })}` : i.precio_listado != null ? ` · ${t("listada en {v}", { v: money(i.precio_listado) })}` : i.precio_mercado != null ? ` · ${t("mercado {v}", { v: money(i.precio_mercado) })}` : ""}
           </div>
           ${i.vin ? `<div class="meta vin">VIN ${i.vin}</div>` : ""}
           <div class="inv-actions">
-            ${e.next ? `<button class="estado-btn" data-avanza="${i.id}" data-estado="${i.estado}">${e.next}</button>` : ""}
-            <button class="draft-btn" data-draft="${i.id}">${state.draftFor === i.id ? "▲ Cerrar" : "📋 Borrador"}</button>
+            ${e.next ? `<button class="estado-btn" data-avanza="${i.id}" data-estado="${i.estado}">${t(e.next)}</button>` : ""}
+            <button class="draft-btn" data-draft="${i.id}">${state.draftFor === i.id ? t("▲ Cerrar") : t("📋 Borrador")}</button>
             <button class="del-btn" data-borra="${i.id}">✕</button>
           </div>
           ${state.draftFor === i.id ? draftHTML(i) : ""}
@@ -790,20 +834,26 @@ function mioHTML() {
 
   return `
     <div class="summary">
-      <div><b>${n("bodega")}</b> en bodega · <b>${n("listada")}</b> listadas · <b>${n("vendida") + n("enviada")}</b> vendidas</div>
-      <div>Invertido: <b>${money(invertido)}</b> · Vendido: <b>${money(vendidoTotal)}</b> · Ganancia est.: <b class="${ganancia >= 0 ? "gain" : "loss"}">${money(Math.round(ganancia))}</b></div>
+      <div>${t("{n} en bodega", { n: `<b>${n("bodega")}</b>` })} · ${t("{n} listadas", { n: `<b>${n("listada")}</b>` })} · ${t("{n} vendidas", { n: `<b>${n("vendida") + n("enviada")}</b>` })}</div>
+      <div>${t("Invertido:")} <b>${money(invertido)}</b> · ${t("Vendido:")} <b>${money(vendidoTotal)}</b> · ${t("Ganancia est.:")} <b class="${ganancia >= 0 ? "gain" : "loss"}">${money(Math.round(ganancia))}</b></div>
     </div>
     <section class="vehicle-block">
-      <h2>📦 Mi inventario (${inv.length})</h2>
-      <div class="rows">${items || `<div class="empty">Aún no has sacado piezas.<br>Busca un carro y toca "＋ La saqué".</div>`}</div>
+      <h2>${t("📦 Mi inventario ({n})", { n: inv.length })}</h2>
+      <div class="rows">${items || `<div class="empty">${t("Aún no has sacado piezas.")}<br>${t('Busca un carro y toca "＋ La saqué".')}</div>`}</div>
     </section>
-    <div class="hint">La ganancia descuenta ~15% de comisión de eBay,<br>el envío gratis que ofreces y el empaque.<br><button id="auth-out" class="linklike">Cerrar sesión</button></div>`;
+    <div class="hint">${t("La ganancia descuenta ~15% de comisión de eBay,")}<br>${t("el envío gratis que ofreces y el empaque.")}<br><button id="auth-out" class="linklike">${t("Cerrar sesión")}</button></div>`;
 }
 
 function render() {
   app.innerHTML = `
     <header>
-      <h1>🔧 Radar de Piezas</h1>
+      <div class="head-top">
+        <h1>${t("🔧 Radar de Piezas")}</h1>
+        <div class="lang">
+          <button class="${state.lang === "es" ? "on" : ""}" data-lang="es">ES</button>
+          <button class="${state.lang === "en" ? "on" : ""}" data-lang="en">EN</button>
+        </div>
+      </div>
       <div id="updated">${hoursAgoText(state.updatedAt)}</div>
     </header>
     ${state.error ? `<div class="error">${state.error}</div>` : ""}
@@ -819,15 +869,18 @@ function render() {
               : mioHTML()
     }
     <nav>
-      <button class="${state.tab === "yarda" ? "active" : ""}" data-tab="yarda">🚗 Buscar</button>
-      <button class="${state.tab === "hoy" ? "active" : ""}" data-tab="hoy">📍 Yarda</button>
-      <button class="${state.tab === "top" ? "active" : ""}" data-tab="top">🔥 Top</button>
-      <button class="${state.tab === "precios" ? "active" : ""}" data-tab="precios">💲 Lista</button>
-      <button class="${state.tab === "mio" ? "active" : ""}" data-tab="mio">📦 Mío</button>
+      <button class="${state.tab === "yarda" ? "active" : ""}" data-tab="yarda">${t("🚗 Buscar")}</button>
+      <button class="${state.tab === "hoy" ? "active" : ""}" data-tab="hoy">${t("📍 Yarda")}</button>
+      <button class="${state.tab === "top" ? "active" : ""}" data-tab="top">${t("🔥 Top")}</button>
+      <button class="${state.tab === "precios" ? "active" : ""}" data-tab="precios">${t("💲 Lista")}</button>
+      <button class="${state.tab === "mio" ? "active" : ""}" data-tab="mio">${t("📦 Mío")}</button>
     </nav>`;
 
   app.querySelectorAll("[data-tab]").forEach((b) =>
     b.addEventListener("click", () => switchTab(b.dataset.tab)),
+  );
+  app.querySelectorAll("[data-lang]").forEach((b) =>
+    b.addEventListener("click", () => setLang(b.dataset.lang)),
   );
   app.querySelectorAll("[data-pick]").forEach((b) =>
     b.addEventListener("click", () => selectVehicle(b.dataset.pick)),
@@ -883,7 +936,7 @@ function render() {
         b.textContent = "✓";
         setTimeout(() => { b.textContent = orig; }, 1500);
       } catch {
-        alert("Copia manual:\n\n" + texto);
+        alert(t("Copia manual:") + "\n\n" + texto);
       }
     }),
   );
@@ -914,7 +967,7 @@ db.auth.onAuthStateChange((_event, session) => {
   try {
     await Promise.all([loadVehicles(), loadUpdatedAt(), loadShipClasses()]);
   } catch (e) {
-    state.error = "No pude conectar. Revisa tu señal e intenta de nuevo.";
+    state.error = t("No pude conectar. Revisa tu señal e intenta de nuevo.");
   }
   render();
 })();

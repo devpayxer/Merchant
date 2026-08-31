@@ -90,6 +90,16 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 - Pestaña "Mío": inventario propio con login (a.ledesma@payxer.com), estados
   bodega→listada→vendida→enviada y ganancia neta.
 - Fotos/links de eBay por pieza: soporte listo, se llenan al activar eBay.
+- Pestaña "💲 Lista": las 73 piezas con el precio de ambas yardas (grande =
+  con core y tax; chico = precio de lista), búsqueda en vivo y las notas de
+  la lista impresa.
+- **Bilingüe ES/EN** (31 ago): selector ES|EN en el encabezado, se recuerda
+  en localStorage y arranca según el idioma del teléfono. Los textos viven
+  en `web/src/i18n.js` con el español como clave; los nombres de pieza en
+  inglés se DERIVAN de part_types.search_keyword (no hay columna name_en, así
+  que una pieza nueva queda bilingüe sola); las frases en español dentro de
+  las notas de precios se traducen con NOTE_PHRASES. Al agregar texto nuevo
+  a la web, agrégalo también al diccionario.
 
 ### Decisiones de negocio tomadas (no cambiar sin preguntar)
 

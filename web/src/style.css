@@ -33,7 +33,28 @@ header {
   color: #fff;
   padding: 14px 16px 10px;
 }
+.head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 header h1 { font-size: 22px; font-weight: 800; }
+
+/* Selector de idioma ES / EN */
+.lang { display: flex; flex: none; border-radius: 9px; overflow: hidden; }
+.lang button {
+  min-width: 42px;
+  min-height: 34px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #d1d5db;
+  background: rgba(255,255,255,.12);
+  border: none;
+  cursor: pointer;
+}
+.lang button.on { background: #fff; color: var(--ink); }
 #updated {
   font-size: 14px;
   color: #d1d5db;
