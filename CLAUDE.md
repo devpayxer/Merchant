@@ -68,10 +68,10 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 3483bb2e0e21546041283fd760c85538). Lo construido más allá del plan original:
 
 - 170 vehículos × 73 piezas = 12,410 combos (se agregaron europeos, los
-  modelos reales de ambas yardas, y 30-31 ago: 14 piezas nuevas — fenders,
+  modelos reales de ambas yardas, y 30-31 ago: 18 piezas nuevas — fenders,
   ventilador de radiador, bomba de gasolina, motor de sunroof, chapas de
   cajuela/cofre, switch de ignición, volante SIN airbag, palanca de
-  direccionales SIN clock spring, turbo, caliper de frenos, múltiple de admisión y cremallera de dirección; 31 ago: múltiple de escape, tapa de válvulas y booster de frenos. Sus precios de ambas yardas ya
+  direccionales SIN clock spring, turbo, caliper de frenos, múltiple de admisión y cremallera de dirección; 31 ago: múltiple de escape, tapa de válvulas, booster de frenos y tapetes (set de 4). Sus precios de ambas yardas ya
   están cargados — se releyeron de las fotos de las listas el 31 ago;
   chapas de cajuela/cofre no aparecen en la lista de EZ, mapeadas como
   Door Latch $5).
