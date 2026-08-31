@@ -24,6 +24,8 @@ const state = {
   user: null,              // sesión del dueño (Supabase Auth)
   inv: null,               // filas de my_inventory
   shipClasses: {},         // pieza -> clase de envío (S/M/L/XL)
+  prices: null,            // lista de precios de las yardas (pestaña "Lista")
+  filterPrecios: "",       // filtro en vivo pestaña "Lista"
   authMsg: "",
   pulled: new Set(),       // feedback visual de "la saqué" en esta sesión
   updatedAt: null,
@@ -125,6 +127,23 @@ async function loadYardCars() {
   state.yardCars = all;
 }
 
+async function loadPrices() {
+  const { data, error } = await db
+    .from("yard_prices")
+    .select("yard,price,core,nota,part_types(name_es,ship_class)");
+  if (error) throw error;
+  state.prices = (data ?? [])
+    .map((p) => ({
+      yard: p.yard,
+      pieza: p.part_types?.name_es ?? "?",
+      ship: p.part_types?.ship_class ?? null,
+      price: Number(p.price),
+      core: Number(p.core ?? 0),
+      nota: p.nota,
+    }))
+    .sort((a, b) => a.pieza.localeCompare(b.pieza, "es"));
+}
+
 async function loadInv() {
   const { data, error } = await db
     .from("my_inventory")
@@ -183,6 +202,10 @@ async function switchTab(tab) {
     }
     if (tab === "mio" && state.user && state.inv === null) {
       await loadInv();
+      render();
+    }
+    if (tab === "precios" && state.prices === null) {
+      await loadPrices();
       render();
     }
   } catch (e) {
@@ -551,6 +574,89 @@ const ESTADOS = {
   enviada: { label: "✅ Enviada",   next: null },
 };
 
+function preciosHTML() {
+  const chips = yardChipsHTML();
+  const buscador = filterInputHTML("filter-precios", state.filterPrecios, "🔎 Busca la pieza (ej. faro)");
+  if (state.prices === null) {
+    return `${chips}${buscador}<div class="loading">Cargando la lista de precios…</div>`;
+  }
+
+  // Una fila por pieza, con el precio de cada yarda al lado
+  const porPieza = new Map();
+  for (const p of state.prices) {
+    if (!porPieza.has(p.pieza)) porPieza.set(p.pieza, { pieza: p.pieza, ship: p.ship });
+    const fila = porPieza.get(p.pieza);
+    fila[p.yard === "EZ PULL" ? "ez" : "harrys"] = p;
+  }
+
+  const q = norm(state.filterPrecios);
+  let filas = [...porPieza.values()];
+  if (q) {
+    filas = filas.filter(
+      (f) =>
+        norm(f.pieza).includes(q) ||
+        norm(f.harrys?.nota ?? "").includes(q) ||
+        norm(f.ez?.nota ?? "").includes(q),
+    );
+  }
+
+  const conTax = (p) => (p ? (p.price + p.core) * 1.06 : null);
+  const verHarrys = state.yardFilter !== "EZ PULL";
+  const verEz = state.yardFilter !== "HAZLE TOWNSHIP";
+
+  const celda = (p, mostrar) => {
+    if (!mostrar) return "";
+    if (!p) return `<div class="pcol"><div class="pnum vacio">—</div></div>`;
+    return `
+      <div class="pcol">
+        <div class="pnum">${money(Math.round(conTax(p)))}</div>
+        <div class="pbase">${money(p.price)}${p.core > 0 ? ` +${money(p.core)}` : ""}</div>
+      </div>`;
+  };
+
+  const items = filas
+    .map((f) => {
+      // La nota es el nombre exacto de la fila en la lista impresa; en modo
+      // comparar se marca de qué yarda viene (a veces difieren, ej. alternador)
+      const notas = [];
+      if (verHarrys && f.harrys?.nota) notas.push({ y: "Harry's", t: f.harrys.nota });
+      if (verEz && f.ez?.nota && f.ez.nota !== f.harrys?.nota) notas.push({ y: "EZ", t: f.ez.nota });
+      const comparando2 = verHarrys && verEz;
+      const nota = notas
+        .map((n) => (comparando2 && notas.length > 1 ? `<b>${n.y}:</b> ${n.t}` : n.t))
+        .join("<br>");
+      return `
+      <div class="prow">
+        <div class="pinfo">
+          <div class="pieza">${f.pieza}${f.ship ? ` <span class="ship-tag">${f.ship}</span>` : ""}</div>
+          ${nota ? `<div class="pnota">${nota}</div>` : ""}
+        </div>
+        ${celda(f.harrys, verHarrys)}
+        ${celda(f.ez, verEz)}
+      </div>`;
+    })
+    .join("");
+
+  const encabezado = `
+    <div class="phead">
+      <div class="pinfo">Pieza</div>
+      ${verHarrys ? `<div class="pcol">Harry's</div>` : ""}
+      ${verEz ? `<div class="pcol">EZ Pull</div>` : ""}
+    </div>`;
+
+  return `
+    ${chips}
+    ${buscador}
+    <section class="vehicle-block">
+      <h2>💲 Precios de yarda (${filas.length})</h2>
+      <div class="rows">
+        ${encabezado}
+        ${items || `<div class="empty">Ninguna pieza con ese nombre.</div>`}
+      </div>
+    </section>
+    <div class="hint">El número grande es lo que pagas en caja: precio + core + 6% de tax de PA.<br>Abajo en chico va el precio de lista.<br>Recuerda los $2 de entrada por visita.</div>`;
+}
+
 // ---------- Fase B: borrador de listado copiable ----------
 // Fórmula de título de vendedores top: carro con specs del VIN + sinónimos
 // de la pieza + OEM + últimos 6 del VIN como rastreo interno. Máx 80 chars.
@@ -701,11 +807,22 @@ function render() {
       <div id="updated">${hoursAgoText(state.updatedAt)}</div>
     </header>
     ${state.error ? `<div class="error">${state.error}</div>` : ""}
-    ${state.tab === "yarda" ? yardaHTML() : state.tab === "hoy" ? hoyHTML() : state.tab === "top" ? topHTML() : mioHTML()}
+    ${
+      state.tab === "yarda"
+        ? yardaHTML()
+        : state.tab === "hoy"
+          ? hoyHTML()
+          : state.tab === "top"
+            ? topHTML()
+            : state.tab === "precios"
+              ? preciosHTML()
+              : mioHTML()
+    }
     <nav>
       <button class="${state.tab === "yarda" ? "active" : ""}" data-tab="yarda">🚗 Buscar</button>
       <button class="${state.tab === "hoy" ? "active" : ""}" data-tab="hoy">📍 Yarda</button>
       <button class="${state.tab === "top" ? "active" : ""}" data-tab="top">🔥 Top</button>
+      <button class="${state.tab === "precios" ? "active" : ""}" data-tab="precios">💲 Lista</button>
       <button class="${state.tab === "mio" ? "active" : ""}" data-tab="mio">📦 Mío</button>
     </nav>`;
 
@@ -740,6 +857,7 @@ function render() {
   }
   bindFilter("filter-hoy", "filterHoy");
   bindFilter("filter-top", "filterTop");
+  bindFilter("filter-precios", "filterPrecios");
 
   app.querySelectorAll("[data-pull]").forEach((b) =>
     b.addEventListener("click", (e) => {

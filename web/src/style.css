@@ -52,12 +52,13 @@ nav {
 nav button {
   flex: 1;
   min-height: 64px;
-  font-size: 19px;
+  font-size: 16px;
   font-weight: 700;
   border: none;
   background: none;
   color: var(--ink-soft);
   cursor: pointer;
+  padding: 0 2px;
 }
 nav button.active {
   color: var(--accent);
@@ -262,6 +263,55 @@ nav button.active {
   border-radius: 10px;
   cursor: pointer;
 }
+
+/* ---------- Lista de precios de yarda ---------- */
+.phead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--ground);
+  border-bottom: 2px solid var(--line);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.prow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.prow:last-child { border-bottom: none; }
+.pinfo { flex: 1; min-width: 0; }
+.prow .pieza { font-size: 17px; font-weight: 700; }
+.pnota {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.ship-tag {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 5px;
+  vertical-align: 2px;
+}
+.pcol {
+  width: 78px;
+  flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pnum { font-size: 20px; font-weight: 800; color: var(--amber); white-space: nowrap; }
+.pnum.vacio { color: #d1d5db; }
+.pbase { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
 
 /* Borrador de listado (Fase B) */
 .draft-btn {
