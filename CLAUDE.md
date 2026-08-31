@@ -191,6 +191,27 @@ devoluciones reales en piezas usadas ~2-4%). Rutina del usuario: guardar
 3-5 vendedores junkyard grandes y revisar su lista Sold semanalmente
 (Terapeak gratis manual; el sold ajeno no existe por API).
 
+### Pendiente 5 — Monitor de competidores (aprobado 31 ago 2026)
+
+Monitorear 50+ vendedores junkyard grandes (tipo parts4less-43) SOLO vía
+Browse API con `filter=sellers:{...}` — NUNCA scrapear eBay (prohibido por
+su User Agreement; arriesga las llaves de developer y la cuenta de
+vendedor; misma lógica que el no a múltiples cuentas). Diseño:
+- Tabla `competitors` (username, notas) + snapshots diarios de su
+  inventario activo: 1-3 llamadas/vendedor/día ≈ 150 llamadas (hay slack).
+- Métricas por vendedor: tamaño y variedad del inventario, precios por
+  pieza/modelo vs los nuestros, listados NUEVOS del día (= qué decidieron
+  sacar del junker), y velocidad de venta estimada = desaparecidos entre
+  snapshots + (nuevos − crecimiento neto). Mismo método de inferencia del
+  radar, aplicado por vendedor.
+- Pantalla "Competidores" en la web: ranking por velocidad, piezas top,
+  sus precios vs los nuestros, alertas ("3 competidores listaron cluster
+  F-150 esta semana a $40-50").
+- El sold ajeno exacto no existe por API: rutina manual del usuario
+  (filtro Sold de 3-5 favoritos, semanal) + Terapeak al abrir cuenta.
+- Lista de vendedores a monitorear: pendiente de armar con el usuario
+  (primero: parts4less-43).
+
 ### Pendiente 4 — Fase C: "La saqué" → listado automático (visión acordada)
 
 Flujo final acordado con el usuario (30 ago 2026):
