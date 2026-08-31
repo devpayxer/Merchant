@@ -283,7 +283,7 @@ function soldUrl(r) {
   const mid = m ? Math.round((+m[1] + +m[2]) / 2) : "";
   const base = (r.vehiculo ?? "").replace(/\s*\d{4}-\d{4}\s*$/, "");
   const q = `${mid} ${base} ${r.keyword ?? ""}`.trim();
-  return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&LH_Sold=1&LH_Complete=1&LH_ItemCondition=3000`;
+  return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&LH_Sold=1&LH_ItemCondition=3000`;
 }
 
 function rowHTML(r, showVehiculo = false, car = null) {
