@@ -67,7 +67,7 @@ Las Fases 1 y 2 están COMPLETAS y desplegadas. Proyecto Supabase: `ebay-radar`
 Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 3483bb2e0e21546041283fd760c85538). Lo construido más allá del plan original:
 
-- 170 vehículos × 72 piezas = 12,240 combos (se agregaron europeos, los
+- 170 vehículos × 73 piezas = 12,410 combos (se agregaron europeos, los
   modelos reales de ambas yardas, y 30-31 ago: 14 piezas nuevas — fenders,
   ventilador de radiador, bomba de gasolina, motor de sunroof, chapas de
   cajuela/cofre, switch de ignición, volante SIN airbag, palanca de
@@ -106,8 +106,8 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 - **Carriles de rastreo** (aprobados 30 ago, sustituyen al ENDED_AFTER_DAYS=5
   global): tracked_combos.priority lo recalcula refresh_yard_matches() cada
   3h con el inventario vivo. Carril rápido = modelos con ≥5 carros vivos
-  entre ambas yardas (~9,288 combos, 135 llamadas/corrida, ciclo ~2.9 días,
-  ENDED_AFTER_DAYS_FAST=4). Carril lento = resto (~2,952 combos, 15
+  entre ambas yardas (~9,417 combos, 135 llamadas/corrida, ciclo ~2.9 días,
+  ENDED_AFTER_DAYS_FAST=4). Carril lento = resto (~2,993 combos, 15
   llamadas/corrida, ciclo ~8.2 días, ENDED_AFTER_DAYS_SLOW=10; no se eliminan
   para conservar historial cuando llegue un carro de ese modelo). Umbral y
   constantes en ebay-sync; bajar cuando el Growth Check suba el límite.
