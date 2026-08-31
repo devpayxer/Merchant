@@ -67,11 +67,11 @@ Las Fases 1 y 2 están COMPLETAS y desplegadas. Proyecto Supabase: `ebay-radar`
 Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 3483bb2e0e21546041283fd760c85538). Lo construido más allá del plan original:
 
-- 170 vehículos × 66 piezas = 11,220 combos (se agregaron europeos, los
-  modelos reales de ambas yardas, y 30 ago: 11 piezas nuevas — fenders,
+- 170 vehículos × 69 piezas = 11,730 combos (se agregaron europeos, los
+  modelos reales de ambas yardas, y 30-31 ago: 14 piezas nuevas — fenders,
   ventilador de radiador, bomba de gasolina, motor de sunroof, chapas de
   cajuela/cofre, switch de ignición, volante SIN airbag, palanca de
-  direccionales SIN clock spring, turbo. Sus precios de ambas yardas ya
+  direccionales SIN clock spring, turbo, caliper de frenos, múltiple de admisión y cremallera de dirección. Sus precios de ambas yardas ya
   están cargados — se releyeron de las fotos de las listas el 31 ago;
   chapas de cajuela/cofre no aparecen en la lista de EZ, mapeadas como
   Door Latch $5).
@@ -105,8 +105,8 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 - **Carriles de rastreo** (aprobados 30 ago, sustituyen al ENDED_AFTER_DAYS=5
   global): tracked_combos.priority lo recalcula refresh_yard_matches() cada
   3h con el inventario vivo. Carril rápido = modelos con ≥5 carros vivos
-  entre ambas yardas (~8,514 combos, 135 llamadas/corrida, ciclo ~2.6 días,
-  ENDED_AFTER_DAYS_FAST=4). Carril lento = resto (~2,706 combos, 15
+  entre ambas yardas (~8,901 combos, 135 llamadas/corrida, ciclo ~2.7 días,
+  ENDED_AFTER_DAYS_FAST=4). Carril lento = resto (~2,829 combos, 15
   llamadas/corrida, ciclo ~7.5 días, ENDED_AFTER_DAYS_SLOW=10; no se eliminan
   para conservar historial cuando llegue un carro de ese modelo). Umbral y
   constantes en ebay-sync; bajar cuando el Growth Check suba el límite.
