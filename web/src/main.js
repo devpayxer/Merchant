@@ -80,8 +80,12 @@ async function loadVehicles() {
 }
 
 async function loadShipClasses() {
-  const { data } = await db.from("part_types").select("name_es,ship_class");
-  for (const p of data ?? []) state.shipClasses[p.name_es] = p.ship_class;
+  const { data } = await db.from("part_types").select("name_es,ship_class,search_keyword");
+  state.partKeywords = {};
+  for (const p of data ?? []) {
+    state.shipClasses[p.name_es] = p.ship_class;
+    state.partKeywords[p.name_es] = p.search_keyword;
+  }
 }
 
 async function loadUpdatedAt() {
@@ -547,6 +551,78 @@ const ESTADOS = {
   enviada: { label: "✅ Enviada",   next: null },
 };
 
+// ---------- Fase B: borrador de listado copiable ----------
+// Fórmula de título de vendedores top: carro con specs del VIN + sinónimos
+// de la pieza + OEM + últimos 6 del VIN como rastreo interno. Máx 80 chars.
+async function toggleDraft(id) {
+  state.draftFor = state.draftFor === id ? null : id;
+  const item = (state.inv ?? []).find((x) => x.id === id);
+  state.vinSpecs = state.vinSpecs ?? {};
+  if (state.draftFor && item?.vin && !item.vin.startsWith("EZ-") && state.vinSpecs[item.vin] === undefined) {
+    const { data } = await db
+      .from("yard_inventory")
+      .select("year,make,model,model_detail,trim,engine_code,chassis_code")
+      .eq("vin", item.vin)
+      .limit(1);
+    state.vinSpecs[item.vin] = data?.[0] ?? false;
+  }
+  render();
+}
+
+function titleCase(s) {
+  return s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+function buildDraft(i) {
+  const realVin = i.vin && !i.vin.startsWith("EZ-") ? i.vin : null;
+  const specs = realVin ? (state.vinSpecs ?? {})[realVin] : null;
+  const kw = state.partKeywords?.[i.pieza] ?? i.pieza;
+  const kwTitle = titleCase(kw.replace(/\s*OEM\s*$/i, ""));
+  const vin6 = realVin ? realVin.slice(-6) : "";
+  let carTitle, carDesc;
+  if (specs) {
+    const modelo = specs.model_detail || specs.model;
+    carTitle = [specs.year, specs.make, modelo, specs.chassis_code, specs.engine_code]
+      .filter(Boolean).join(" ");
+    carDesc = `${specs.year} ${specs.make} ${modelo}${specs.trim ? ` ${specs.trim}` : ""}`;
+  } else {
+    const m = /(\d{4})-(\d{4})\s*$/.exec(i.vehiculo ?? "");
+    const base = (i.vehiculo ?? "").replace(/\s*\d{4}-\d{4}\s*$/, "");
+    carTitle = m ? `${m[1]} ${m[2]} ${base}` : (i.vehiculo ?? "");
+    carDesc = i.vehiculo ?? "";
+  }
+  let title = `${carTitle} ${kwTitle} OEM${vin6 ? ` ${vin6}` : ""}`;
+  if (title.length > 80) title = `${carTitle} ${kwTitle} OEM`;
+  if (title.length > 80) title = title.slice(0, 80).trim();
+  const desc = `${kwTitle} (OEM) removed from a ${carDesc}${realVin ? ` — VIN ${realVin}` : ""}.
+
+Good used working condition — please see photos, what you see is what you get.
+
+- Genuine OEM part, direct fit
+- FREE shipping
+- Ships within 2 business days
+- Returns accepted
+
+Check compatibility before buying. Message us with your VIN and we'll confirm fitment.`;
+  return { title, desc };
+}
+
+function draftHTML(i) {
+  const draft = buildDraft(i);
+  const kw = state.partKeywords?.[i.pieza];
+  const sold = kw ? soldUrl({ vehiculo: i.vehiculo, keyword: kw }) : null;
+  return `
+    <div class="draft">
+      <div class="draft-label">Título (${draft.title.length}/80)
+        <button class="copy-mini" data-copia="${encodeURIComponent(draft.title)}">Copiar</button></div>
+      <div class="draft-text">${draft.title}</div>
+      <div class="draft-label">Descripción
+        <button class="copy-mini" data-copia="${encodeURIComponent(draft.desc)}">Copiar</button></div>
+      <div class="draft-text">${draft.desc.replace(/\n/g, "<br>")}</div>
+      <div class="draft-hint">Precio: mira los ${sold ? `<a href="${sold}" target="_blank" rel="noopener">💰 vendidos ↗</a>` : "vendidos"} y publícate 10-15% abajo del típico. Tip: en eBay busca un VENDIDO igual y usa "Sell one like this" — clona categoría y specifics.</div>
+    </div>`;
+}
+
 function mioHTML() {
   if (!state.user) {
     return `
@@ -597,8 +673,10 @@ function mioHTML() {
           ${i.vin ? `<div class="meta vin">VIN ${i.vin}</div>` : ""}
           <div class="inv-actions">
             ${e.next ? `<button class="estado-btn" data-avanza="${i.id}" data-estado="${i.estado}">${e.next}</button>` : ""}
+            <button class="draft-btn" data-draft="${i.id}">${state.draftFor === i.id ? "▲ Cerrar" : "📋 Borrador"}</button>
             <button class="del-btn" data-borra="${i.id}">✕</button>
           </div>
+          ${state.draftFor === i.id ? draftHTML(i) : ""}
         </div>
       </div>`;
     })
@@ -674,6 +752,22 @@ function render() {
   );
   app.querySelectorAll("[data-borra]").forEach((b) =>
     b.addEventListener("click", () => deleteInv(Number(b.dataset.borra))),
+  );
+  app.querySelectorAll("[data-draft]").forEach((b) =>
+    b.addEventListener("click", () => toggleDraft(Number(b.dataset.draft))),
+  );
+  app.querySelectorAll("[data-copia]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const texto = decodeURIComponent(b.dataset.copia);
+      try {
+        await navigator.clipboard.writeText(texto);
+        const orig = b.textContent;
+        b.textContent = "✓";
+        setTimeout(() => { b.textContent = orig; }, 1500);
+      } catch {
+        alert("Copia manual:\n\n" + texto);
+      }
+    }),
   );
   const authBtn = app.querySelector("#auth-btn");
   if (authBtn) {

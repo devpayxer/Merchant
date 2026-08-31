@@ -188,7 +188,7 @@ Lo original pedido era:
 - Autollenar `costo` al tocar "＋ La saqué" (ya no preguntar con prompt).
 - Preguntar al usuario si la yarda cobra cuota de entrada para sumarla.
 
-### Pendiente 3 — Fase B del inventario: borradores de listado
+### Pendiente 3 — Fase B: borradores de listado — ✅ v1 EN PRODUCCIÓN 31 ago
 
 Al marcar pieza "en bodega", generar borrador copiable: título con specs del
 VIN ("11 BMW 328i E90 N52 Right Headlight OEM"), precio sugerido, categoría,
