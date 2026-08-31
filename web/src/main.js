@@ -276,7 +276,20 @@ async function toggleCar(vin, label) {
 }
 
 // ---------- Render ----------
+// Búsqueda de eBay filtrada a VENDIDOS reales (el filtro Sold/Completed
+// del app de eBay como deep link — no existe por API, pero sí por URL)
+function soldUrl(r) {
+  const m = /(\d{4})-(\d{4})\s*$/.exec(r.vehiculo ?? "");
+  const mid = m ? Math.round((+m[1] + +m[2]) / 2) : "";
+  const base = (r.vehiculo ?? "").replace(/\s*\d{4}-\d{4}\s*$/, "");
+  const q = `${mid} ${base} ${r.keyword ?? ""}`.trim();
+  return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&LH_Sold=1&LH_Complete=1&LH_ItemCondition=3000`;
+}
+
 function rowHTML(r, showVehiculo = false, car = null) {
+  const soldLink = r.keyword
+    ? ` · <a href="${soldUrl(r)}" target="_blank" rel="noopener">💰 vendidos ↗</a>`
+    : "";
   const link = r.ebay_url
     ? ` · <a href="${r.ebay_url}" target="_blank" rel="noopener">ver en eBay ↗</a>`
     : "";
@@ -349,7 +362,7 @@ function rowHTML(r, showVehiculo = false, car = null) {
         <div class="meta">
           <span class="sem ${semClass(r.semaforo)}">${r.semaforo ?? ""}</span>
           · ${r.vendidos_30d ?? 0} vendidos/30d
-          · ${r.competencia ?? 0} compitiendo${link}
+          · ${r.competencia ?? 0} compitiendo${soldLink}${link}
         </div>
         ${precios}
         ${pullBtn}
