@@ -71,8 +71,10 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   modelos reales de ambas yardas, y 30 ago: 11 piezas nuevas — fenders,
   ventilador de radiador, bomba de gasolina, motor de sunroof, chapas de
   cajuela/cofre, switch de ignición, volante SIN airbag, palanca de
-  direccionales SIN clock spring, turbo. PENDIENTE: pedir al dueño los
-  precios de Harry's y EZ para esas 11 piezas — ganancia sale null mientras).
+  direccionales SIN clock spring, turbo. Sus precios de ambas yardas ya
+  están cargados — se releyeron de las fotos de las listas el 31 ago;
+  chapas de cajuela/cofre no aparecen en la lista de EZ, mapeadas como
+  Door Latch $5).
 - Inventario EN VIVO de DOS yardas, cron `yard-sync-3h`:
   1. Harry's U-Pull It (Hazle Township): scrapeado de wegotused.com vía el
      proxy `/api/yard` en Pages (Sucuri bloquea IPs de Supabase; el proxy
