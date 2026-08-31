@@ -100,7 +100,8 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   Ganancia neta = precio × 0.85 (comisión) − envío por clase (S $6 / M $13 /
   L $22) − $2 empaque − costo de yarda × 1.06 (sales tax PA). La yarda cobra
   además $2 de entrada POR VISITA (no se prorratea por pieza). XL = solo
-  recogida local, no listar.
+  recogida local, no listar (excepción 31 ago: el rin SUELTO pasó a L,
+  listable con envío ~$22; el set de 4 sigue siendo trato local).
 - Precio de publicación sugerido: 10-15% bajo la mediana.
 - **Carriles de rastreo** (aprobados 30 ago, sustituyen al ENDED_AFTER_DAYS=5
   global): tracked_combos.priority lo recalcula refresh_yard_matches() cada
