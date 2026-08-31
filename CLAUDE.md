@@ -181,6 +181,15 @@ Al marcar pieza "en bodega", generar borrador copiable: título con specs del
 VIN ("11 BMW 328i E90 N52 Right Headlight OEM"), precio sugerido, categoría,
 condición, compatibilidad. El usuario publica manual desde la app de eBay
 (cuenta nueva tiene límites ~10 items/$500 al mes).
+Fórmula de título aprendida de vendedores top (31 ago, ej. parts4less-43):
+rango de años ("2004 2008"), modelo con variantes ("F150 F-150"), sinónimos
+de la pieza ("Speedometer Cluster Gauge"), "OEM", y sufijo de rastreo
+interno (nosotros: últimos 6 del VIN). Al listar manual: buscar un VENDIDO
+igual y usar el botón "Sell one like this" de eBay (clona categoría y
+specifics). Activar free returns junto al free shipping (mejor ranking;
+devoluciones reales en piezas usadas ~2-4%). Rutina del usuario: guardar
+3-5 vendedores junkyard grandes y revisar su lista Sold semanalmente
+(Terapeak gratis manual; el sold ajeno no existe por API).
 
 ### Pendiente 4 — Fase C: "La saqué" → listado automático (visión acordada)
 
