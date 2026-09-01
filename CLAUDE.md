@@ -136,8 +136,13 @@ rechazado), así que la apelación va por el foro community.ebay.com → "eBay
 APIs" posteando desde henrledesm3. POST PUBLICADO 31 ago:
 https://community.ebay.com/forum/ebay-developers-program-57950/topic/developer-registration-rejected-despite-using-my-9-year-ebay-account-email-478214/
 Revisar respuestas cada 1-2 días; el correo de registro se manda al staff
-por DM, no en el hilo. NO re-registrarse con otros datos salvo que
-Developer Support lo indique. Cuando aprueben, ejecutar los pasos de abajo.
+por DM, no en el hilo. ADEMÁS (1 sep): el usuario encontró el formulario
+directo "My account registration was rejected" (pide username del developer
+account + use case) y lo envió con a.ledesma@payxer.com y el caso de uso
+redactado (Browse API para pricing research, negocio propio en PA, vínculo
+con henrledesm3 desde 2016). Esperar respuesta por correo. NO re-registrarse
+con otros datos salvo que Developer Support lo indique. Cuando aprueben,
+ejecutar los pasos de abajo.
 
 1. `supabase secrets set EBAY_CLIENT_ID=... EBAY_CLIENT_SECRET=...`
 2. Invocar `ebay-sync` a mano; verificar listings/snapshots/fotos.
