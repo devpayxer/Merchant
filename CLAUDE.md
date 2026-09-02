@@ -67,7 +67,12 @@ Las Fases 1 y 2 están COMPLETAS y desplegadas. Proyecto Supabase: `ebay-radar`
 Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 3483bb2e0e21546041283fd760c85538). Lo construido más allá del plan original:
 
-- 170 vehículos × 73 piezas = 12,410 combos (se agregaron europeos, los
+- **729 vehículos × 73 piezas = 53,217 combos** (2 sep: COBERTURA TOTAL —
+  559 generaciones generadas desde el inventario real sin match, con cortes
+  por huecos de años; 4,987/5,063 carros vivos matchean = 100% de los
+  modernos, solo quedan fuera 76 anteriores a 1985. Matcher arreglado:
+  "&"↔"AND" y RAM PICKUP→Ram 1500). Historia previa: 170 vehículos (se
+  agregaron europeos, los
   modelos reales de ambas yardas, y 30-31 ago: 18 piezas nuevas — fenders,
   ventilador de radiador, bomba de gasolina, motor de sunroof, chapas de
   cajuela/cofre, switch de ignición, volante SIN airbag, palanca de
@@ -113,14 +118,17 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   recogida local, no listar (excepción 31 ago: el rin SUELTO pasó a L,
   listable con envío ~$22; el set de 4 sigue siendo trato local).
 - Precio de publicación sugerido: 10-15% bajo la mediana.
-- **Carriles de rastreo** (aprobados 30 ago, sustituyen al ENDED_AFTER_DAYS=5
-  global): tracked_combos.priority lo recalcula refresh_yard_matches() cada
-  3h con el inventario vivo. Carril rápido = modelos con ≥5 carros vivos
-  entre ambas yardas (~9,417 combos, 135 llamadas/corrida, ciclo ~2.9 días,
-  ENDED_AFTER_DAYS_FAST=4). Carril lento = resto (~2,993 combos, 15
-  llamadas/corrida, ciclo ~8.2 días, ENDED_AFTER_DAYS_SLOW=10; no se eliminan
-  para conservar historial cuando llegue un carro de ese modelo). Umbral y
-  constantes en ebay-sync; bajar cuando el Growth Check suba el límite.
+- **Carriles de rastreo** (re-balanceados 2 sep con la cobertura total;
+  sustituyen al ENDED_AFTER_DAYS=5 global): tracked_combos.priority lo
+  recalcula refresh_yard_matches() cada 3h con el inventario vivo.
+  Carril 1 = ≥10 carros vivos (~11,826 combos, 135 llamadas/corrida, ciclo
+  ~3.6 días, ENDED_AFTER_DAYS_FAST=4 — radar completo).
+  Carril 2 = 3-9 carros (~14,381 combos, 15 llamadas/corrida, ciclo ~40
+  días, ENDED_AFTER_DAYS_SLOW=50 — sirve para precio mediano y competencia,
+  NO para velocidad de venta).
+  Carril 3 = ≤2 carros (~27,010 combos): ESTACIONADO, sin rastreo de eBay
+  hasta que el Growth Check suba el límite; la app igual muestra precios de
+  yarda y el link de vendidos. Umbrales y constantes en ebay-sync.
   NO abrir múltiples cuentas
   de developer para dividir carga (viola políticas de eBay; riesgo de baneo).
 - Tiempo de manejo en listados: 2 días hábiles.

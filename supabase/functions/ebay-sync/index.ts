@@ -14,20 +14,23 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-// Carriles de rastreo (aprobados por el dueño 30 ago 2026). priority la
-// mantiene refresh_yard_matches() cada 3h según el inventario real:
-//   1 = carril rápido: modelos con >= 5 carros vivos en las yardas
-//       (~7,095 combos → ciclo ~2.2 días)
-//   2 = carril lento: el resto (~2,255 combos → ciclo ~6 días)
+// Carriles de rastreo (re-balanceados 2 sep 2026 al pasar el catálogo a
+// TODOS los vehículos de las yardas: 729 modelos / ~53,000 combos).
+// priority la mantiene refresh_yard_matches() cada 3h según inventario real:
+//   1 = >= 10 carros vivos (~11,800 combos → ciclo ~3.6 días, radar completo)
+//   2 = 3-9 carros vivos (~14,400 combos → ciclo ~40 días: sirve para precio
+//       mediano y competencia, NO para velocidad de venta)
+//   3 = <= 2 carros vivos: SIN rastreo hasta que el Growth Check suba el
+//       límite (la app igual muestra precios de yarda y el link de vendidos)
 // 135 + 15 = 150 llamadas/corrida × 24 ≈ 3,600/día, bajo el límite de 5,000.
 const BATCH_FAST = 135;
 const BATCH_SLOW = 15;
 const RESULTS_PER_COMBO = 50;    // listados por consulta
-// No visto en N días => vendido/terminado. Cada carril tolera ~2 barridos
-// perdidos (evita falsos "vendidos" por resultados inestables del search).
+// No visto en N días => vendido/terminado. Cada umbral supera el ciclo de
+// su carril para tolerar un barrido fallido sin falsos "vendidos".
 // Bajar cuando el Growth Check suba el límite de llamadas.
 const ENDED_AFTER_DAYS_FAST = 4;
-const ENDED_AFTER_DAYS_SLOW = 10;
+const ENDED_AFTER_DAYS_SLOW = 50;
 const MIN_PRICE = 10;            // ignora listados de menos de $10 (no vale el esfuerzo)
 
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
@@ -182,7 +185,7 @@ Deno.serve(async () => {
         .order("last_checked_at", { ascending: true, nullsFirst: true });
       return pri === "fast"
         ? q.eq("priority", 1).limit(BATCH_FAST)
-        : q.gte("priority", 2).limit(BATCH_SLOW);
+        : q.eq("priority", 2).limit(BATCH_SLOW); // priority 3 = estacionado
     };
     const [fast, slow] = await Promise.all([pickLane("fast"), pickLane("slow")]);
     if (fast.error) throw fast.error;

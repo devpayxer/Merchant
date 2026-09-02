@@ -152,7 +152,7 @@ async function loadHotList(label) {
 async function loadYardCars() {
   // Paginado: entre las dos yardas puede haber más de 1,000 filas
   const all = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 10; i++) {
     const { data, error } = await db
       .from("yarda_ahora")
       .select("*")
