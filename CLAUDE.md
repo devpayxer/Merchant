@@ -104,7 +104,9 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   Complementa el link por pieza que ya existía en cada fila.
 - Pestaña "💲 Lista": las 73 piezas con el precio de ambas yardas (grande =
   con core y tax; chico = precio de lista), búsqueda en vivo y las notas de
-  la lista impresa.
+  la lista impresa. Cada fila trae su link "💰 vendidos" (2 sep): busca esa
+  pieza SUELTA en eBay (search_keyword, sin atarla a un carro) para tantear
+  el mercado general de esa pieza.
 - **Bilingüe ES/EN** (31 ago): selector ES|EN en el encabezado, se recuerda
   en localStorage y arranca según el idioma del teléfono. Los textos viven
   en `web/src/i18n.js` con el español como clave; los nombres de pieza en

@@ -351,9 +351,10 @@ function soldUrl(r) {
   return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&LH_Sold=1&LH_ItemCondition=3000`;
 }
 
-// Vendidos de TODO un vehículo (no de una pieza): sirve para descubrir
-// piezas que ni siquiera tenemos en el catálogo. Categoría 6028 =
+// Búsqueda de VENDIDOS en eBay para cualquier texto. Categoría 6028 =
 // Car & Truck Parts & Accessories, para que no salgan carros completos.
+// Se usa a nivel de vehículo (descubrir piezas fuera del catálogo) y a
+// nivel de pieza suelta en la lista de precios.
 function soldUrlCarro(texto) {
   return `https://www.ebay.com/sch/6028/i.html?_nkw=${encodeURIComponent(texto)}&LH_Sold=1&LH_ItemCondition=3000`;
 }
@@ -692,6 +693,9 @@ function preciosHTML() {
       <div class="prow">
         <div class="pinfo">
           <div class="pieza">${partName(f.pieza)}${f.ship ? ` <span class="ship-tag">${f.ship}</span>` : ""}</div>
+          ${state.partKeywords?.[f.pieza]
+            ? `<a class="psold" href="${soldUrlCarro(state.partKeywords[f.pieza])}" target="_blank" rel="noopener">${t("💰 vendidos ↗")}</a>`
+            : ""}
           ${nota ? `<div class="pnota">${nota}</div>` : ""}
         </div>
         ${celda(f.harrys, verHarrys)}
