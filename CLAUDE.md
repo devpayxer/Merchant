@@ -157,9 +157,15 @@ por DM, no en el hilo. ADEMÁS (1 sep): el usuario encontró el formulario
 directo "My account registration was rejected" (pide username del developer
 account + use case) y lo envió con a.ledesma@payxer.com y el caso de uso
 redactado (Browse API para pricing research, negocio propio en PA, vínculo
-con henrledesm3 desde 2016). Esperar respuesta por correo. NO re-registrarse
-con otros datos salvo que Developer Support lo indique. Cuando aprueben,
-ejecutar los pasos de abajo.
+con henrledesm3 desde 2016).
+CONFIRMADO (2 sep): eBay Developer Support respondió EN EL HILO del foro
+remitiendo justamente a ese formulario
+(developer.ebay.com/support/developer-account-support, sección "My account
+registration was rejected") — o sea, el canal correcto ya está usado y la
+solicitud está en cola con Developer Account Support. El usuario responde en
+el hilo dejando constancia de que ya lo envió el 1 sep. Esperar respuesta por
+correo. NO re-registrarse con otros datos salvo que Developer Support lo
+indique. Cuando aprueben, ejecutar los pasos de abajo.
 
 1. `supabase secrets set EBAY_CLIENT_ID=... EBAY_CLIENT_SECRET=...`
 2. Invocar `ebay-sync` a mano; verificar listings/snapshots/fotos.
