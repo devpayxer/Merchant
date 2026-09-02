@@ -95,6 +95,13 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 - Pestaña "Mío": inventario propio con login (a.ledesma@payxer.com), estados
   bodega→listada→vendida→enviada y ganancia neta.
 - Fotos/links de eBay por pieza: soporte listo, se llenan al activar eBay.
+- **Link "💰 todo lo vendido"** por VEHÍCULO (2 sep): en la tarjeta de cada
+  carro de la yarda (año exacto + marca + modelo del VIN) y en el encabezado
+  de cada bloque en Buscar (año medio de la generación). Abre eBay con
+  categoría 6028 (Car & Truck Parts, para que no salgan carros completos),
+  LH_Sold=1 y condición usada. Sirve para descubrir piezas que NO están en
+  nuestras 73 — el catálogo nunca va a cubrir todo lo que se vende.
+  Complementa el link por pieza que ya existía en cada fila.
 - Pestaña "💲 Lista": las 73 piezas con el precio de ambas yardas (grande =
   con core y tax; chico = precio de lista), búsqueda en vivo y las notas de
   la lista impresa.

@@ -232,6 +232,23 @@ nav button.active {
 .gan-tag.media { background: var(--amber); }
 .gan-tag.baja { background: #9ca3af; }
 .row .meta a { color: var(--accent); font-weight: 700; text-decoration: none; }
+
+/* Link "todo lo vendido" a nivel de vehículo */
+.sold-carro { display: inline-block; min-height: 32px; line-height: 32px; }
+.h2-sold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sold-carro.on-dark {
+  flex: none;
+  font-size: 14px;
+  font-weight: 700;
+  color: #93c5fd;
+  text-decoration: none;
+  white-space: nowrap;
+}
 .row .sem { font-weight: 700; }
 .sem-hot { color: var(--red); }
 .sem-warn { color: var(--amber); }

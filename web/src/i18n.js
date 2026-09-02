@@ -46,6 +46,7 @@ export const STRINGS = {
   // Fila de pieza
   "ver en eBay ↗": "view on eBay ↗",
   "💰 vendidos ↗": "💰 sold ↗",
+  "💰 todo lo vendido ↗": "💰 everything sold ↗",
   "{n} vendidos/30d": "{n} sold/30d",
   "{n} compitiendo": "{n} competing",
   "＋ La saqué": "＋ I pulled it",

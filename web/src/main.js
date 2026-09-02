@@ -351,6 +351,17 @@ function soldUrl(r) {
   return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&LH_Sold=1&LH_ItemCondition=3000`;
 }
 
+// Vendidos de TODO un vehículo (no de una pieza): sirve para descubrir
+// piezas que ni siquiera tenemos en el catálogo. Categoría 6028 =
+// Car & Truck Parts & Accessories, para que no salgan carros completos.
+function soldUrlCarro(texto) {
+  return `https://www.ebay.com/sch/6028/i.html?_nkw=${encodeURIComponent(texto)}&LH_Sold=1&LH_ItemCondition=3000`;
+}
+
+function soldCarroLink(texto, clase = "sold-carro") {
+  return `<a class="${clase}" href="${soldUrlCarro(texto)}" target="_blank" rel="noopener">${t("💰 todo lo vendido ↗")}</a>`;
+}
+
 function rowHTML(r, showVehiculo = false, car = null) {
   const soldLink = r.keyword
     ? ` · <a href="${soldUrl(r)}" target="_blank" rel="noopener">${t("💰 vendidos ↗")}</a>`
@@ -467,6 +478,12 @@ function bindFilter(id, key) {
   });
 }
 
+function labelParaBusqueda(label) {
+  const m = /(\d{4})-(\d{4})\s*$/.exec(label ?? "");
+  const base = (label ?? "").replace(/\s*\d{4}-\d{4}\s*$/, "");
+  return m ? `${Math.round((+m[1] + +m[2]) / 2)} ${base}` : (label ?? "");
+}
+
 function yardaHTML() {
   const q = norm(state.query);
   const matches =
@@ -492,7 +509,10 @@ function yardaHTML() {
       else body = rows.map((r) => rowHTML(r)).join("");
       return `
         <section class="vehicle-block">
-          <h2>${l}</h2>
+          <h2 class="h2-sold">
+            <span>${l}</span>
+            ${soldCarroLink(labelParaBusqueda(l), "sold-carro on-dark")}
+          </h2>
           <div class="rows">${body}</div>
         </section>`;
     })
@@ -568,6 +588,7 @@ function hoyHTML() {
               <div class="meta">${state.yardFilter === "all" ? `<b>${c.yard === "EZ PULL" ? "EZ Pull" : "Harry's"}</b> · ` : ""}${t("Fila {n}", { n: c.row_number || "?" })}${c.color ? ` · ${c.color}` : ""} · ${daysInYard(c.yard_date)}</div>
               ${specs ? `<div class="meta">${specs}</div>` : ""}
               ${open && !c.vin.startsWith("EZ-") ? `<div class="meta vin">VIN ${c.vin}</div>` : ""}
+              <div class="meta">${soldCarroLink(`${c.year} ${c.make} ${c.model_detail || c.model}`)}</div>
             </div>
             <div class="chev">${open ? "▲" : "▼"}</div>
           </div>
@@ -890,6 +911,10 @@ function render() {
   );
   app.querySelectorAll("[data-car]").forEach((b) =>
     b.addEventListener("click", () => toggleCar(b.dataset.car, b.dataset.label)),
+  );
+  // Un link dentro de la tarjeta no debe abrir/cerrar el carro
+  app.querySelectorAll("[data-car] a").forEach((a) =>
+    a.addEventListener("click", (e) => e.stopPropagation()),
   );
   app.querySelectorAll("[data-yard]").forEach((b) =>
     b.addEventListener("click", () => {
