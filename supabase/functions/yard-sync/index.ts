@@ -19,7 +19,14 @@ const EZ_URL = "https://www.ezpullandsave.com/get_inventory.php";
 // través del relevo /api/yard desplegado en el proyecto de Cloudflare Pages
 // (web/public/_worker.js).
 const BASE = "https://ebay-radar.pages.dev/api/yard?page=";
-const PAGES_PER_RUN = 40; // 15 filas/página; vuelta completa ≈ 5 corridas
+const PAGES_PER_RUN = 40;  // tope de páginas; manda el presupuesto de tiempo
+// Presupuesto para la parte de Harry's: la Edge Function tiene límite de
+// cómputo y el sitio de la yarda a veces va lento. Cortamos por tiempo y
+// guardamos el avance, en vez de que la corrida muera sin guardar nada.
+const TIME_BUDGET_MS = 60_000;
+const FETCH_TRIES = 2;    // reintentos por página antes de saltarla
+const RETRY_MS = 800;     // espera entre reintentos (crece por intento)
+const MAX_FALLADAS_PARA_BARRER = 2; // más fallos que esto => no barrer
 const DELAY_MS = 350;
 
 const ROW_RE =
@@ -291,36 +298,53 @@ Deno.serve(async (req) => {
     let total: number | null = null;
     let rows = 0;
     let wrapped = false;
+    let falladas = 0;
     const now = new Date().toISOString();
 
+    // Harry's va aislado: si truena, EZ Pull y el refresh de matches
+    // igual corren (antes un 403 tumbaba TODA la corrida y dejaba el
+    // cursor clavado en la misma página, congelando las dos yardas).
+    let harrysError: string | null = null;
+    try {
     for (let i = 0; i < PAGES_PER_RUN; i++) {
-      let url = BASE + page;
-      let res = await fetch(url, {
-        redirect: "manual",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml",
-        },
-      });
-      // Sigue hasta 3 redirects conservando query y headers
-      for (let hop = 0; hop < 3 && res.status >= 300 && res.status < 400; hop++) {
-        const loc = res.headers.get("location");
-        if (!loc) break;
-        url = new URL(loc, url).toString();
-        res = await fetch(url, {
+      if (Date.now() - started > TIME_BUDGET_MS) break; // se acabó el tiempo
+      // Sucuri (el WAF de la yarda) devuelve 403 esporádicos. Reintentamos
+      // la página y, si sigue fallando, la SALTAMOS: una página mala no
+      // puede volver a tumbar la corrida ni dejar el cursor clavado.
+      let res: Response | null = null;
+      for (let intento = 1; intento <= FETCH_TRIES; intento++) {
+        let url = BASE + page;
+        let r = await fetch(url, {
           redirect: "manual",
           headers: {
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
             Accept: "text/html,application/xhtml+xml",
           },
-        });
+        }).catch(() => null);
+        // Sigue hasta 3 redirects conservando query y headers
+        for (let hop = 0; hop < 3 && r && r.status >= 300 && r.status < 400; hop++) {
+          const loc = r.headers.get("location");
+          if (!loc) break;
+          url = new URL(loc, url).toString();
+          r = await fetch(url, {
+            redirect: "manual",
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+              Accept: "text/html,application/xhtml+xml",
+            },
+          }).catch(() => null);
+        }
+        if (r?.ok) { res = r; break; }
+        console.error(`pagina ${page} intento ${intento}: ${r?.status ?? "sin respuesta"}`);
+        if (intento < FETCH_TRIES) await new Promise((r2) => setTimeout(r2, RETRY_MS * intento));
       }
-      if (!res.ok) {
-        throw new Error(
-          `inventario pagina ${page}: ${res.status} loc=${res.headers.get("location") ?? "-"} url=${url}`,
-        );
+      if (!res) {
+        falladas++;
+        page++;
+        await new Promise((r) => setTimeout(r, DELAY_MS));
+        continue;
       }
       const html = await res.text();
 
@@ -366,15 +390,21 @@ Deno.serve(async (req) => {
       await new Promise((r) => setTimeout(r, DELAY_MS));
     }
 
-    if (wrapped) {
-      // Lo que llevamos 3+ días sin ver ya no está en la yarda
-      const cutoff = new Date(Date.now() - 3 * 864e5).toISOString();
+    // Solo barremos si la vuelta fue (casi) limpia: con páginas saltadas
+    // podríamos dar por ida a un carro que sí sigue ahí.
+    if (wrapped && falladas <= MAX_FALLADAS_PARA_BARRER) {
+      // Lo que llevamos 6+ días sin ver ya no está en la yarda
+      const cutoff = new Date(Date.now() - 6 * 864e5).toISOString();
       const { error: e1 } = await supabase
         .from("yard_inventory")
         .update({ left_at: now })
         .is("left_at", null)
         .lt("last_seen", cutoff);
       if (e1) throw e1;
+    }
+    } catch (err) {
+      harrysError = err instanceof Error ? err.message : String(err);
+      console.error("Harry's:", harrysError);
     }
 
     // Decodifica un lote de VINs pendientes en cada corrida (carros nuevos)
@@ -399,12 +429,16 @@ Deno.serve(async (req) => {
 
     const { error: e3 } = await supabase
       .from("yard_sync_state")
-      .update({ next_page: page, total_records: total, last_run_at: now })
+      .update({
+        next_page: harrysError ? (page + PAGES_PER_RUN) % 200 : page,
+        total_records: total,
+        last_run_at: now,
+      })
       .eq("id", 1);
     if (e3) throw e3;
 
     return new Response(
-      JSON.stringify({ rows, next_page: page, total, wrapped, decoded, ez, ms: Date.now() - started }),
+      JSON.stringify({ rows, next_page: page, total, wrapped, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {
