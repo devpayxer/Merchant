@@ -24,6 +24,7 @@ const PAGES_PER_RUN = 40;  // tope de páginas; manda el presupuesto de tiempo
 // cómputo y el sitio de la yarda a veces va lento. Cortamos por tiempo y
 // guardamos el avance, en vez de que la corrida muera sin guardar nada.
 const TIME_BUDGET_MS = 60_000;
+const FETCH_TIMEOUT_MS = 12_000; // el WAF a veces deja la conexión colgada
 const FETCH_TRIES = 2;    // reintentos por página antes de saltarla
 const RETRY_MS = 800;     // espera entre reintentos (crece por intento)
 const MAX_FALLADAS_PARA_BARRER = 2; // más fallos que esto => no barrer
@@ -321,6 +322,7 @@ Deno.serve(async (req) => {
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
             Accept: "text/html,application/xhtml+xml",
           },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         }).catch(() => null);
         // Sigue hasta 3 redirects conservando query y headers
         for (let hop = 0; hop < 3 && r && r.status >= 300 && r.status < 400; hop++) {
@@ -334,6 +336,7 @@ Deno.serve(async (req) => {
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
               Accept: "text/html,application/xhtml+xml",
             },
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           }).catch(() => null);
         }
         if (r?.ok) { res = r; break; }
