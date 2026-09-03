@@ -118,6 +118,18 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   nuestra primera lectura del inventario, porque de esas solo vemos los carros
   que TODAVÍA siguen en la yarda — subestima. De la semana del 24 ago en
   adelante el conteo es real.
+- **Render parcial al escribir** (3 sep): antes cada letra en un buscador
+  llamaba a `render()`, que rehace `app.innerHTML` — el `<input>` se destruía
+  y el teclado del teléfono se cerraba a la primera letra (el `focus()` que
+  se hacía después NO reabre el teclado virtual en iOS/Android). Ahora cada
+  pestaña con buscador se parte en dos: `xxxHTML()` (chips + input + un
+  `<div id="resultados">`) y `xxxResultadosHTML()` (solo la lista). Al
+  escribir se llama `renderResultados()`, que reemplaza el contenido de
+  `#resultados` (y `#sugerencias` en Buscar) SIN tocar el input.
+  `bindAcciones(root)` re-engancha los handlers que viven dentro de los
+  resultados y se llama en el render completo y en el parcial. REGLA: si
+  agregas otra pantalla con buscador, sigue este patrón; nunca llames
+  `render()` desde un evento `input`.
 - **Bilingüe ES/EN** (31 ago): selector ES|EN en el encabezado, se recuerda
   en localStorage y arranca según el idioma del teléfono. Los textos viven
   en `web/src/i18n.js` con el español como clave; los nombres de pieza en

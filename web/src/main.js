@@ -488,10 +488,7 @@ function bindFilter(id, key) {
   if (!el) return;
   el.addEventListener("input", (e) => {
     state[key] = e.target.value;
-    render();
-    const s = app.querySelector("#" + id);
-    s.focus();
-    s.setSelectionRange(s.value.length, s.value.length);
+    renderResultados();
   });
 }
 
@@ -501,7 +498,7 @@ function labelParaBusqueda(label) {
   return m ? `${Math.round((+m[1] + +m[2]) / 2)} ${base}` : (label ?? "");
 }
 
-function yardaHTML() {
+function yardaResultadosHTML() {
   const q = norm(state.query);
   const matches =
     q.length >= 1
@@ -536,24 +533,38 @@ function yardaHTML() {
     .join("");
 
   return `
-    ${yardChipsHTML()}
-    <div class="search-box">
-      <input id="search" type="text" inputmode="search" autocomplete="off"
-        placeholder="${t("🔎 Busca el carro (ej. Civic)")}" value="${state.query}" />
-      ${
-        matches.length
-          ? `<div class="suggestions">${matches
-              .map((v) => `<button data-pick="${v.label}">${v.label}</button>`)
-              .join("")}</div>`
-          : ""
-      }
-    </div>
     <div class="chips">${chips}</div>
     ${
       state.selected.length
         ? blocks
         : `<div class="hint">${t("Escribe el carro que ves en la yarda.")}<br>${t("Puedes elegir varios a la vez.")}</div>`
     }`;
+}
+
+// Sugerencias del autocomplete. Van en su propio contenedor para poder
+// actualizarlas SIN volver a crear el <input> (si el input se destruye,
+// el teléfono cierra el teclado a la primera letra).
+function sugerenciasHTML() {
+  const q = norm(state.query);
+  if (q.length < 1) return "";
+  const matches = state.vehicles
+    .filter((v) => norm(v.label).includes(q) && !state.selected.includes(v.label))
+    .slice(0, 8);
+  if (!matches.length) return "";
+  return `<div class="suggestions">${matches
+    .map((v) => `<button data-pick="${v.label}">${v.label}</button>`)
+    .join("")}</div>`;
+}
+
+function yardaHTML() {
+  return `
+    ${yardChipsHTML()}
+    <div class="search-box">
+      <input id="search" type="text" inputmode="search" autocomplete="off"
+        placeholder="${t("🔎 Busca el carro (ej. Civic)")}" value="${state.query}" />
+      <div id="sugerencias">${sugerenciasHTML()}</div>
+    </div>
+    <div id="resultados">${yardaResultadosHTML()}</div>`;
 }
 
 function daysInYard(iso) {
@@ -650,7 +661,7 @@ function entradasHTML() {
     </section>`;
 }
 
-function hoyHTML() {
+function hoyResultadosHTML() {
   if (state.yardCars === null) return `<div class="loading">${t("Cargando inventario de la yarda…")}</div>`;
   if (state.yardCars.length === 0) return `<div class="empty">${t("Ningún carro de la yarda coincide con el radar todavía")}</div>`;
 
@@ -701,9 +712,6 @@ function hoyHTML() {
     .join("");
 
   return `
-    ${yardChipsHTML()}
-    ${entradasHTML()}
-    ${filterInputHTML("filter-hoy", state.filterHoy, t("🔎 Filtra: marca, modelo, año, fila…"))}
     <section class="vehicle-block">
       <h2>${q
         ? t("📍 En la yarda: {n} de {total} carros del radar", { n: cars.length, total: porYarda.length })
@@ -713,7 +721,15 @@ function hoyHTML() {
     <div class="hint">${t("Toca un carro para ver qué piezas sacarle.")}<br>${t("🆕 = llegó esta semana (mejores piezas disponibles).")}</div>`;
 }
 
-function topHTML() {
+function hoyHTML() {
+  return `
+    ${yardChipsHTML()}
+    ${entradasHTML()}
+    ${filterInputHTML("filter-hoy", state.filterHoy, t("🔎 Filtra: marca, modelo, año, fila…"))}
+    <div id="resultados">${hoyResultadosHTML()}</div>`;
+}
+
+function topResultadosHTML() {
   if (state.top === null) return `<div class="loading">${t("Cargando…")}</div>`;
   if (state.top.length === 0) return `<div class="empty">${t("Aún no hay datos")}</div>`;
 
@@ -724,12 +740,17 @@ function topHTML() {
 
   const blocks = rows.map((r) => rowHTML(r, true)).join("");
   return `
-    ${yardChipsHTML()}
-    ${filterInputHTML("filter-top", state.filterTop, t("🔎 Filtra: pieza o vehículo…"))}
     <section class="vehicle-block">
       <h2>${t("🔥 Top 50 general")}</h2>
       <div class="rows">${blocks || `<div class="empty">${t('Nada coincide con "{q}"', { q: state.filterTop })}</div>`}</div>
     </section>`;
+}
+
+function topHTML() {
+  return `
+    ${yardChipsHTML()}
+    ${filterInputHTML("filter-top", state.filterTop, t("🔎 Filtra: pieza o vehículo…"))}
+    <div id="resultados">${topResultadosHTML()}</div>`;
 }
 
 const ESTADOS = {
@@ -739,11 +760,9 @@ const ESTADOS = {
   enviada: { label: "✅ Enviada",   next: null },
 };
 
-function preciosHTML() {
-  const chips = yardChipsHTML();
-  const buscador = filterInputHTML("filter-precios", state.filterPrecios, t("🔎 Busca la pieza (ej. faro)"));
+function preciosResultadosHTML() {
   if (state.prices === null) {
-    return `${chips}${buscador}<div class="loading">${t("Cargando la lista de precios…")}</div>`;
+    return `<div class="loading">${t("Cargando la lista de precios…")}</div>`;
   }
 
   // Una fila por pieza, con el precio de cada yarda al lado
@@ -815,8 +834,6 @@ function preciosHTML() {
     </div>`;
 
   return `
-    ${chips}
-    ${buscador}
     <section class="vehicle-block">
       <h2>${t("💲 Precios de yarda ({n})", { n: filas.length })}</h2>
       <div class="rows">
@@ -825,6 +842,13 @@ function preciosHTML() {
       </div>
     </section>
     <div class="hint">${t("El número grande es lo que pagas en caja: precio + core + 6% de tax de PA.")}<br>${t("Abajo en chico va el precio de lista.")}<br>${t("Recuerda los $2 de entrada por visita.")}</div>`;
+}
+
+function preciosHTML() {
+  return `
+    ${yardChipsHTML()}
+    ${filterInputHTML("filter-precios", state.filterPrecios, t("🔎 Busca la pieza (ej. faro)"))}
+    <div id="resultados">${preciosResultadosHTML()}</div>`;
 }
 
 // ---------- Fase B: borrador de listado copiable ----------
@@ -972,6 +996,77 @@ function mioHTML() {
     <div class="hint">${t("La ganancia descuenta ~15% de comisión de eBay,")}<br>${t("el envío gratis que ofreces y el empaque.")}<br><button id="auth-out" class="linklike">${t("Cerrar sesión")}</button></div>`;
 }
 
+// Handlers de todo lo que vive DENTRO del contenedor de resultados. Se
+// vuelven a enganchar tanto en el render completo como en el parcial.
+function bindAcciones(root) {
+  root.querySelectorAll("[data-pick]").forEach((b) =>
+    b.addEventListener("click", () => selectVehicle(b.dataset.pick)),
+  );
+  root.querySelectorAll("[data-remove]").forEach((b) =>
+    b.addEventListener("click", () => removeVehicle(b.dataset.remove)),
+  );
+  root.querySelectorAll("[data-car]").forEach((b) =>
+    b.addEventListener("click", () => toggleCar(b.dataset.car, b.dataset.label)),
+  );
+  // Un link dentro de la tarjeta no debe abrir/cerrar el carro
+  root.querySelectorAll("[data-car] a").forEach((a) =>
+    a.addEventListener("click", (e) => e.stopPropagation()),
+  );
+  root.querySelectorAll("[data-pull]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      pullPart(JSON.parse(decodeURIComponent(b.dataset.pull)));
+    }),
+  );
+  root.querySelectorAll("[data-avanza]").forEach((b) =>
+    b.addEventListener("click", () => advanceEstado(Number(b.dataset.avanza), b.dataset.estado)),
+  );
+  root.querySelectorAll("[data-borra]").forEach((b) =>
+    b.addEventListener("click", () => deleteInv(Number(b.dataset.borra))),
+  );
+  root.querySelectorAll("[data-draft]").forEach((b) =>
+    b.addEventListener("click", () => toggleDraft(Number(b.dataset.draft))),
+  );
+  root.querySelectorAll("[data-copia]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const texto = decodeURIComponent(b.dataset.copia);
+      try {
+        await navigator.clipboard.writeText(texto);
+        const orig = b.textContent;
+        b.textContent = "\u2713";
+        setTimeout(() => { b.textContent = orig; }, 1500);
+      } catch {
+        alert(t("Copia manual:") + "\n\n" + texto);
+      }
+    }),
+  );
+}
+
+// Redibuja SOLO la lista de resultados (y las sugerencias del buscador).
+// Al escribir NO se toca el <input>, así el teclado del teléfono no se
+// cierra: si el input se destruye y se vuelve a crear, iOS y Android
+// bajan el teclado aunque le devuelvas el foco por código.
+function renderResultados() {
+  const sug = app.querySelector("#sugerencias");
+  if (sug && state.tab === "yarda") {
+    sug.innerHTML = sugerenciasHTML();
+    bindAcciones(sug);
+  }
+  const cont = app.querySelector("#resultados");
+  if (!cont) return;
+  cont.innerHTML =
+    state.tab === "yarda"
+      ? yardaResultadosHTML()
+      : state.tab === "hoy"
+        ? hoyResultadosHTML()
+        : state.tab === "top"
+          ? topResultadosHTML()
+          : state.tab === "precios"
+            ? preciosResultadosHTML()
+            : "";
+  bindAcciones(cont);
+}
+
 function render() {
   app.innerHTML = `
     <header>
@@ -1010,19 +1105,7 @@ function render() {
   app.querySelectorAll("[data-lang]").forEach((b) =>
     b.addEventListener("click", () => setLang(b.dataset.lang)),
   );
-  app.querySelectorAll("[data-pick]").forEach((b) =>
-    b.addEventListener("click", () => selectVehicle(b.dataset.pick)),
-  );
-  app.querySelectorAll("[data-remove]").forEach((b) =>
-    b.addEventListener("click", () => removeVehicle(b.dataset.remove)),
-  );
-  app.querySelectorAll("[data-car]").forEach((b) =>
-    b.addEventListener("click", () => toggleCar(b.dataset.car, b.dataset.label)),
-  );
-  // Un link dentro de la tarjeta no debe abrir/cerrar el carro
-  app.querySelectorAll("[data-car] a").forEach((a) =>
-    a.addEventListener("click", (e) => e.stopPropagation()),
-  );
+  bindAcciones(app);
   app.querySelectorAll("[data-yard]").forEach((b) =>
     b.addEventListener("click", () => {
       state.yardFilter = b.dataset.yard;
@@ -1040,44 +1123,13 @@ function render() {
   if (search) {
     search.addEventListener("input", (e) => {
       state.query = e.target.value;
-      render();
-      const s = app.querySelector("#search");
-      s.focus();
-      s.setSelectionRange(s.value.length, s.value.length);
+      renderResultados();
     });
   }
   bindFilter("filter-hoy", "filterHoy");
   bindFilter("filter-top", "filterTop");
   bindFilter("filter-precios", "filterPrecios");
 
-  app.querySelectorAll("[data-pull]").forEach((b) =>
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      pullPart(JSON.parse(decodeURIComponent(b.dataset.pull)));
-    }),
-  );
-  app.querySelectorAll("[data-avanza]").forEach((b) =>
-    b.addEventListener("click", () => advanceEstado(Number(b.dataset.avanza), b.dataset.estado)),
-  );
-  app.querySelectorAll("[data-borra]").forEach((b) =>
-    b.addEventListener("click", () => deleteInv(Number(b.dataset.borra))),
-  );
-  app.querySelectorAll("[data-draft]").forEach((b) =>
-    b.addEventListener("click", () => toggleDraft(Number(b.dataset.draft))),
-  );
-  app.querySelectorAll("[data-copia]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const texto = decodeURIComponent(b.dataset.copia);
-      try {
-        await navigator.clipboard.writeText(texto);
-        const orig = b.textContent;
-        b.textContent = "✓";
-        setTimeout(() => { b.textContent = orig; }, 1500);
-      } catch {
-        alert(t("Copia manual:") + "\n\n" + texto);
-      }
-    }),
-  );
   const authBtn = app.querySelector("#auth-btn");
   if (authBtn) {
     authBtn.addEventListener("click", () =>
