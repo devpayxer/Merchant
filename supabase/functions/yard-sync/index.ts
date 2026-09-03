@@ -371,19 +371,35 @@ Deno.serve(async (req) => {
     }
     // Diagnóstico: {"mode":"raw","page":0} devuelve status + trozo del cuerpo
     if (body?.mode === "raw") {
-      const url = BASE + (body.page ?? 0);
+      // target "direct" = pegarle al sitio de la yarda sin pasar por el
+      // proxy de Pages, para comparar los dos caminos.
+      const url = body.target === "direct"
+        ? "https://wegotused.com/our-inventory/?inv%5Byard%5D=HAZLE%20TOWNSHIP&inv%5Bpage%5D=" + (body.page ?? 0)
+        : BASE + (body.page ?? 0) + (body.debug ? "&debug=1" : "");
       const r = await fetch(url, {
         redirect: "manual",
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          Referer: "https://wegotused.com/our-inventory/",
+          "Sec-Fetch-Dest": "document",
+          "Sec-Fetch-Mode": "navigate",
+          "Sec-Fetch-Site": "same-origin",
+          "Upgrade-Insecure-Requests": "1",
         },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(Number(body.timeout) || 55_000),
       }).catch((e) => ({ status: 0, err: String(e) } as unknown as Response));
       const txt = typeof (r as Response).text === "function" ? await (r as Response).text() : "";
       return new Response(
-        JSON.stringify({ url, status: r.status, snippet: txt.slice(0, 700) }),
+        JSON.stringify({
+          url,
+          status: r.status,
+          err: (r as unknown as { err?: string }).err ?? null,
+          snippet: txt.slice(0, 700),
+        }),
         { headers: { "Content-Type": "application/json" } },
       );
     }
