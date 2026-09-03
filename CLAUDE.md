@@ -295,7 +295,8 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   (`sucuri_cloudproxy_js`). En el navegador la web funciona normal y sin
   captcha. NO está caída. Hipótesis: el volumen (40 páginas cada 3 h ≈
   320 requests/día, más la cabeza de 10 páginas que agregué el 3 sep)
-  disparó la mitigación de bots. NO construir un resolvedor del desafío
+  disparó la mitigación de bots — VER LA CORRECCIÓN DE ABAJO: esa
+  hipótesis se cayó el mismo día. NO construir un resolvedor del desafío
   JS (evasión de WAF; descartado).
 - **Decisión del usuario (textual):** "es solo actualizar la primera
   página, quizás 2, ellos no actualizan seguido, quizás una vez al día."
@@ -316,16 +317,35 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   por tanto los carriles de rastreo) pueden ir algo inflados. Si el
   usuario quiere detectar salidas más rápido, subir `SWEEP_PAGES_PER_RUN`
   con cuidado (cada +3 páginas/corrida = +6 requests/día).
-- **Estado al cerrar el 3 sep 04:30 UTC:** el bloqueo aún NO había
-  cedido (una sola request de prueba vía proxy colgó 50 s). Esperar a que
-  baje la reputación del origen con el nuevo volumen; revisar en
-  `yard_sync_state.harrys_run_at` y en la respuesta del cron
-  (`net._http_response`) si `falladas` vuelve a 0 y `rows` > 0. Si en
-  3-4 días sigue bloqueado, el plan B es que el proxy corra en otro
-  origen (p. ej. un Worker aparte con otra IP de salida) o pedirle al
-  usuario que abra la página desde su teléfono en la app (lectura
-  cliente, sin robot). El sandbox de Claude NO alcanza wegotused.com ni
+- **CORRECCIÓN 3 sep 04:45 UTC — la hipótesis del volumen era casi con
+  seguridad EQUIVOCADA.** El usuario reportó que la página también le da
+  error DESDE SU COMPUTADORA, durante una tormenta eléctrica en la zona.
+  Al revisar la firma de los errores, encaja con que el SERVIDOR DE ORIGEN
+  de wegotused.com está caído o intermitente, no con que nos estén
+  bloqueando:
+  - Vía el proxy de Pages: la request CUELGA (>55 s) o devuelve
+    `504 error code: 504`. Un 504 de Sucuri significa que Sucuri (que va
+    por delante) no obtuvo respuesta del origen. Un bloqueo por
+    reputación sería rápido: 403, 429 o el desafío JS, no una espera de
+    55 segundos.
+  - EZ Pull respondió normal en la misma corrida (2,012 carros), así que
+    nuestra red y la Edge Function están sanas.
+  - El `307` con `sucuri_cloudproxy_js` en la ruta DIRECTA no es nuevo ni
+    es el problema: Sucuri siempre le pone desafío JS a las IPs de
+    datacenter de Supabase. Por eso existe el proxy de Pages desde el
+    principio. Sigue igual que siempre.
+  Conclusión: **no hay nada que arreglar de nuestro lado**; hay que
+  esperar a que el sitio de la yarda vuelva. Antes de volver a tocar
+  código, confirmar con el usuario si la página le carga en el navegador.
+- **Cómo verificar cuando vuelva:** `POST yard-sync {"harrys":true}` y
+  mirar `falladas` (debe ser 0) y `rows` (> 0); o revisar
+  `yard_sync_state.harrys_run_at` y las respuestas del cron en
+  `net._http_response`. El sandbox de Claude NO alcanza wegotused.com ni
   pages.dev; probar siempre a través de la función.
+- **Si el sitio carga bien en el navegador y aun así el robot falla**
+  durante varios días, ENTONCES sí sospechar bloqueo, y el plan B es
+  mover el relevo a otro origen (un Worker aparte con otra IP de salida).
+  NO construir un resolvedor del desafío JS.
 
 ### Otras notas operativas
 
