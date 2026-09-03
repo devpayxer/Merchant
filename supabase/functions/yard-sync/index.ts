@@ -281,6 +281,25 @@ Deno.serve(async (req) => {
         headers: { "Content-Type": "application/json" },
       });
     }
+    // Diagnóstico: {"mode":"raw","page":0} devuelve status + trozo del cuerpo
+    if (body?.mode === "raw") {
+      const url = BASE + (body.page ?? 0);
+      const r = await fetch(url, {
+        redirect: "manual",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      }).catch((e) => ({ status: 0, err: String(e) } as unknown as Response));
+      const txt = typeof (r as Response).text === "function" ? await (r as Response).text() : "";
+      return new Response(
+        JSON.stringify({ url, status: r.status, snippet: txt.slice(0, 700) }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     if (body?.mode === "decode") {
       const decoded = await decodeVins(Math.min(Number(body.limit) || 500, 1000));
       return new Response(
