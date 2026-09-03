@@ -24,6 +24,11 @@ const PAGES_PER_RUN = 40;  // tope de páginas; manda el presupuesto de tiempo
 // cómputo y el sitio de la yarda a veces va lento. Cortamos por tiempo y
 // guardamos el avance, en vez de que la corrida muera sin guardar nada.
 const TIME_BUDGET_MS = 60_000;
+// Barrido de cabeza: las primeras páginas traen los carros recién
+// llegados, así que se leen en cada corrida (novedades en <=3h en vez de
+// esperar la vuelta completa).
+const HEAD_PAGES_MAX = 10;
+const HEAD_BUDGET_MS = 25_000;
 const FETCH_TIMEOUT_MS = 12_000; // el WAF a veces deja la conexión colgada
 const FETCH_TRIES = 2;    // reintentos por página antes de saltarla
 const RETRY_MS = 800;     // espera entre reintentos (crece por intento)
@@ -263,6 +268,89 @@ async function decodeVins(limit: number): Promise<number> {
   return decoded;
 }
 
+// Baja UNA página del inventario y la guarda. Devuelve cuántos carros
+// trajo y cuántos de esos no teníamos: eso permite parar el barrido de
+// cabeza apenas deja de haber novedades.
+async function scrapePage(page: number, now: string) {
+  let res: Response | null = null;
+  for (let intento = 1; intento <= FETCH_TRIES; intento++) {
+    let url = BASE + page;
+    let r = await fetch(url, {
+      redirect: "manual",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    }).catch(() => null);
+    // Sigue hasta 3 redirects conservando query y headers
+    for (let hop = 0; hop < 3 && r && r.status >= 300 && r.status < 400; hop++) {
+      const loc = r.headers.get("location");
+      if (!loc) break;
+      url = new URL(loc, url).toString();
+      r = await fetch(url, {
+        redirect: "manual",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      }).catch(() => null);
+    }
+    if (r?.ok) { res = r; break; }
+    console.error(`pagina ${page} intento ${intento}: ${r?.status ?? "sin respuesta"}`);
+    if (intento < FETCH_TRIES) await new Promise((r2) => setTimeout(r2, RETRY_MS * intento));
+  }
+  if (!res) return { ok: false, vistos: 0, nuevos: 0, total: null as number | null, fin: false };
+
+  const html = await res.text();
+  const m = html.match(/Showing (\d+) to (\d+) of (\d+)/);
+  const total = m ? Number(m[3]) : null;
+
+  // Map por VIN: la yarda a veces repite un carro en la misma página
+  const byVin = new Map<string, Record<string, unknown>>();
+  for (const r of html.matchAll(ROW_RE)) {
+    const [, year, make, model, mfr, color, date, row, vin] = r;
+    if (!vin?.trim()) continue;
+    byVin.set(vin.trim(), {
+      vin: vin.trim(),
+      yard: YARD,
+      year: Number(year) || null,
+      make: make.trim(),
+      model: model.trim(),
+      manufacturer: mfr.trim(),
+      color: color.trim(),
+      yard_date: parseDate(date),
+      row_number: row.trim(),
+      last_seen: now,
+      left_at: null,
+    });
+  }
+
+  const batch = [...byVin.values()];
+  let nuevos = 0;
+  if (batch.length > 0) {
+    const vins = batch.map((b) => b.vin as string);
+    const { data: yaEstan } = await supabase
+      .from("yard_inventory")
+      .select("vin")
+      .in("vin", vins);
+    const conocidos = new Set((yaEstan ?? []).map((e) => e.vin));
+    nuevos = vins.filter((v) => !conocidos.has(v)).length;
+
+    const { error } = await supabase
+      .from("yard_inventory")
+      .upsert(batch, { onConflict: "vin" });
+    if (error) throw error;
+  }
+
+  // ¿Se acabó el inventario? -> el barrido dio la vuelta
+  const fin = !m || batch.length === 0 || (total !== null && Number(m[2]) >= total);
+  return { ok: true, vistos: batch.length, nuevos, total, fin };
+}
+
 Deno.serve(async (req) => {
   const started = Date.now();
   try {
@@ -325,91 +413,46 @@ Deno.serve(async (req) => {
     // igual corren (antes un 403 tumbaba TODA la corrida y dejaba el
     // cursor clavado en la misma página, congelando las dos yardas).
     let harrysError: string | null = null;
+    let cabeza = 0;      // páginas leídas en el barrido de cabeza
+    let nuevosArriba = 0; // carros nuevos encontrados arriba
     try {
+    // ---- 1) BARRIDO DE CABEZA (en CADA corrida) ----
+    // La yarda lista del más nuevo al más viejo (verificado: la página 0
+    // trae las fechas más recientes), así que los carros que acaban de
+    // entrar están arriba. Leemos las primeras páginas y paramos apenas
+    // dos seguidas no traigan nada nuevo: normalmente son 2 páginas.
+    let sinNuevos = 0;
+    for (let p = 0; p < HEAD_PAGES_MAX; p++) {
+      if (Date.now() - started > HEAD_BUDGET_MS) break;
+      const r = await scrapePage(p, now);
+      cabeza++;
+      if (!r.ok) { falladas++; break; } // si la cabeza falla, no insistimos
+      rows += r.vistos;
+      nuevosArriba += r.nuevos;
+      if (r.total !== null) total = r.total;
+      if (r.fin) break;
+      sinNuevos = r.nuevos === 0 ? sinNuevos + 1 : 0;
+      if (sinNuevos >= 2) break; // dos páginas seguidas sin novedad: basta
+      await new Promise((r2) => setTimeout(r2, DELAY_MS));
+    }
+
+    // ---- 2) BARRIDO PROFUNDO (rotativo, con el tiempo que sobre) ----
+    // La cabeza sola nunca vería los carros que YA NO ESTÁN; para eso
+    // seguimos dando la vuelta completa al inventario, página por página.
     for (let i = 0; i < PAGES_PER_RUN; i++) {
       if (Date.now() - started > TIME_BUDGET_MS) break; // se acabó el tiempo
-      // Sucuri (el WAF de la yarda) devuelve 403 esporádicos. Reintentamos
-      // la página y, si sigue fallando, la SALTAMOS: una página mala no
-      // puede volver a tumbar la corrida ni dejar el cursor clavado.
-      let res: Response | null = null;
-      for (let intento = 1; intento <= FETCH_TRIES; intento++) {
-        let url = BASE + page;
-        let r = await fetch(url, {
-          redirect: "manual",
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-            Accept: "text/html,application/xhtml+xml",
-          },
-          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        }).catch(() => null);
-        // Sigue hasta 3 redirects conservando query y headers
-        for (let hop = 0; hop < 3 && r && r.status >= 300 && r.status < 400; hop++) {
-          const loc = r.headers.get("location");
-          if (!loc) break;
-          url = new URL(loc, url).toString();
-          r = await fetch(url, {
-            redirect: "manual",
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-              Accept: "text/html,application/xhtml+xml",
-            },
-            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-          }).catch(() => null);
-        }
-        if (r?.ok) { res = r; break; }
-        console.error(`pagina ${page} intento ${intento}: ${r?.status ?? "sin respuesta"}`);
-        if (intento < FETCH_TRIES) await new Promise((r2) => setTimeout(r2, RETRY_MS * intento));
-      }
-      if (!res) {
+      const r = await scrapePage(page, now);
+      if (!r.ok) {
         falladas++;
         page++;
-        await new Promise((r) => setTimeout(r, DELAY_MS));
+        await new Promise((r2) => setTimeout(r2, DELAY_MS));
         continue;
       }
-      const html = await res.text();
-
-      const m = html.match(/Showing (\d+) to (\d+) of (\d+)/);
-      if (m) total = Number(m[3]);
-
-      // Map por VIN: la yarda a veces repite un carro en la misma página
-      const byVin = new Map<string, Record<string, unknown>>();
-      for (const r of html.matchAll(ROW_RE)) {
-        const [, year, make, model, mfr, color, date, row, vin] = r;
-        if (!vin?.trim()) continue;
-        byVin.set(vin.trim(), {
-          vin: vin.trim(),
-          yard: YARD,
-          year: Number(year) || null,
-          make: make.trim(),
-          model: model.trim(),
-          manufacturer: mfr.trim(),
-          color: color.trim(),
-          yard_date: parseDate(date),
-          row_number: row.trim(),
-          last_seen: now,
-          left_at: null,
-        });
-      }
-
-      const batch = [...byVin.values()];
-      if (batch.length > 0) {
-        const { error } = await supabase
-          .from("yard_inventory")
-          .upsert(batch, { onConflict: "vin" });
-        if (error) throw error;
-        rows += batch.length;
-      }
-
-      // ¿Se acabó el inventario? -> vuelta completa
-      if (!m || batch.length === 0 || (total !== null && Number(m[2]) >= total)) {
-        wrapped = true;
-        page = 0;
-        break;
-      }
+      rows += r.vistos;
+      if (r.total !== null) total = r.total;
+      if (r.fin) { wrapped = true; page = 0; break; }
       page++;
-      await new Promise((r) => setTimeout(r, DELAY_MS));
+      await new Promise((r2) => setTimeout(r2, DELAY_MS));
     }
 
     // Solo barremos si la vuelta fue (casi) limpia: con páginas saltadas
@@ -460,7 +503,7 @@ Deno.serve(async (req) => {
     if (e3) throw e3;
 
     return new Response(
-      JSON.stringify({ rows, next_page: page, total, wrapped, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
+      JSON.stringify({ rows, nuevosArriba, cabeza, next_page: page, total, wrapped, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {
