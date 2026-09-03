@@ -210,6 +210,60 @@ nav button.active {
 }
 .yard-chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
 
+/* Entradas por semana */
+.intake { margin: 12px 14px 0; }
+.intake-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  font-size: 17px;
+  font-weight: 800;
+  text-align: left;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.intake-head .chev { color: var(--accent); font-size: 18px; flex: none; }
+.intake-body {
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  margin-top: -12px;
+  padding: 14px 14px 12px;
+}
+.wk { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+.wk-lab {
+  width: 62px;
+  flex: none;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.wk-bar { flex: 1; height: 20px; background: var(--ground); border-radius: 5px; overflow: hidden; }
+.wk-bar span { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+.wk-num {
+  width: 56px;
+  flex: none;
+  text-align: right;
+  font-size: 17px;
+  font-weight: 800;
+}
+.wk.now .wk-bar span { background: var(--amber); }
+.wk.now .wk-lab, .wk.now .wk-num { color: var(--amber); }
+.intake-note {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
 /* Precios yarda vs eBay + ganancia neta */
 .precios { font-size: 15px; font-weight: 700; margin-top: 3px; }
 .precios .yarda { color: var(--amber); }

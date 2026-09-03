@@ -69,6 +69,16 @@ export const STRINGS = {
   "📍 En la yarda: {n} de {total} carros del radar":
     "📍 In the yard: {n} of {total} radar cars",
   "Fila {n}": "Row {n}",
+
+  // Entradas por semana
+  "~{n} carros por semana": "~{n} cars per week",
+  "Sin datos de entradas todavía": "No intake data yet",
+  "Promedio de las últimas {n} semanas completas.":
+    "Average of the last {n} full weeks.",
+  "🟠 La semana de arriba va a medias — todavía no termina.":
+    "🟠 The top week is only partway through — it hasn't ended yet.",
+  "≥ = pueden ser más: de esas semanas solo vemos los carros que siguen en la yarda.":
+    "≥ = could be more: for those weeks we only see cars still in the yard.",
   "llegó hoy": "arrived today",
   "llegó ayer": "arrived yesterday",
   "llegó hace {n} días": "arrived {n} days ago",

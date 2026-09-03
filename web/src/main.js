@@ -28,6 +28,8 @@ const state = {
   lists: {},               // label -> filas de hot_list
   top: null,               // filas del top general
   yardCars: null,          // carros de la yarda que están en el radar
+  intake: null,            // carros que entraron por semana (entradas_semanales)
+  intakeOpen: false,       // panel de entradas desplegado
   expanded: {},            // vin -> true (carro expandido en "hoy")
   filterHoy: "",           // filtro en vivo pestaña "En yarda"
   yardFilter: "all",       // "all" | "HAZLE TOWNSHIP" | "EZ PULL"
@@ -165,6 +167,16 @@ async function loadYardCars() {
   state.yardCars = all;
 }
 
+// Cuántos carros entran por semana a cada yarda
+async function loadIntake() {
+  const { data, error } = await db
+    .from("entradas_semanales")
+    .select("*")
+    .order("semana", { ascending: false });
+  if (error) throw error;
+  state.intake = data ?? [];
+}
+
 async function loadPrices() {
   const { data, error } = await db
     .from("yard_prices")
@@ -236,6 +248,10 @@ async function switchTab(tab) {
     }
     if (tab === "hoy" && state.yardCars === null) {
       await loadYardCars();
+      render();
+    }
+    if (tab === "hoy" && state.intake === null) {
+      await loadIntake();
       render();
     }
     if (tab === "mio" && state.user && state.inv === null) {
@@ -548,6 +564,92 @@ function daysInYard(iso) {
   return t("llegó hace {n} días", { n: d });
 }
 
+// ---------- Entradas por semana ----------
+const MESES_ES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+
+// Fecha local en ISO (no usar toISOString: convierte a UTC y puede correr el día)
+function isoLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Lunes de la semana de una fecha (Postgres date_trunc('week') también da lunes)
+function lunesDe(d) {
+  const x = new Date(d);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return isoLocal(x);
+}
+
+function semanaLabel(iso) {
+  const d = new Date(iso + "T12:00:00");
+  return state.lang === "en"
+    ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : `${d.getDate()} ${MESES_ES[d.getMonth()]}`;
+}
+
+function entradasHTML() {
+  if (state.intake === null) return "";
+
+  // Respeta el selector de yarda: "Todas" suma las dos
+  const filas = state.yardFilter === "all"
+    ? state.intake
+    : state.intake.filter((r) => r.yard === state.yardFilter);
+
+  const porSemana = new Map();
+  for (const r of filas) {
+    const acc = porSemana.get(r.semana) ?? { carros: 0, exacto: true };
+    acc.carros += r.carros;
+    acc.exacto = acc.exacto && r.exacto;
+    porSemana.set(r.semana, acc);
+  }
+  const semanas = [...porSemana.entries()]
+    .map(([semana, v]) => ({ semana, ...v }))
+    .sort((a, b) => (a.semana < b.semana ? 1 : -1))
+    .slice(0, 10);
+  if (semanas.length === 0) return "";
+
+  const actual = lunesDe(new Date());
+  // El promedio ignora la semana en curso (va a medias) y toma hasta 8
+  const completas = semanas.filter((s2) => s2.semana !== actual).slice(0, 8);
+  const prom = completas.length
+    ? Math.round(completas.reduce((a, s2) => a + s2.carros, 0) / completas.length)
+    : null;
+  const hayEstimadas = semanas.some((s2) => !s2.exacto);
+  const tope = Math.max(...semanas.map((s2) => s2.carros), 1);
+
+  const barras = semanas
+    .map((s2) => {
+      const enCurso = s2.semana === actual;
+      return `
+        <div class="wk${enCurso ? " now" : ""}">
+          <div class="wk-lab">${semanaLabel(s2.semana)}</div>
+          <div class="wk-bar"><span style="width:${Math.max(2, Math.round((s2.carros / tope) * 100))}%"></span></div>
+          <div class="wk-num">${s2.exacto ? "" : "≥"}${s2.carros}</div>
+        </div>`;
+    })
+    .join("");
+
+  const resumen = prom === null
+    ? t("Sin datos de entradas todavía")
+    : t("~{n} carros por semana", { n: prom });
+
+  return `
+    <section class="intake">
+      <button class="intake-head" data-intake="1">
+        <span>📈 ${resumen}</span>
+        <span class="chev">${state.intakeOpen ? "▲" : "▼"}</span>
+      </button>
+      ${state.intakeOpen ? `
+        <div class="intake-body">
+          ${barras}
+          <div class="intake-note">
+            ${semanas.some((s2) => s2.semana === actual) ? t("🟠 La semana de arriba va a medias — todavía no termina.") + "<br>" : ""}
+            ${prom !== null ? t("Promedio de las últimas {n} semanas completas.", { n: completas.length }) + "<br>" : ""}
+            ${hayEstimadas ? t("≥ = pueden ser más: de esas semanas solo vemos los carros que siguen en la yarda.") : ""}
+          </div>
+        </div>` : ""}
+    </section>`;
+}
+
 function hoyHTML() {
   if (state.yardCars === null) return `<div class="loading">${t("Cargando inventario de la yarda…")}</div>`;
   if (state.yardCars.length === 0) return `<div class="empty">${t("Ningún carro de la yarda coincide con el radar todavía")}</div>`;
@@ -600,6 +702,7 @@ function hoyHTML() {
 
   return `
     ${yardChipsHTML()}
+    ${entradasHTML()}
     ${filterInputHTML("filter-hoy", state.filterHoy, t("🔎 Filtra: marca, modelo, año, fila…"))}
     <section class="vehicle-block">
       <h2>${q
@@ -923,6 +1026,12 @@ function render() {
   app.querySelectorAll("[data-yard]").forEach((b) =>
     b.addEventListener("click", () => {
       state.yardFilter = b.dataset.yard;
+      render();
+    }),
+  );
+  app.querySelectorAll("[data-intake]").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.intakeOpen = !state.intakeOpen;
       render();
     }),
   );

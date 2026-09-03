@@ -108,6 +108,16 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   la lista impresa. Cada fila trae su link "💰 vendidos" (2 sep): busca esa
   pieza SUELTA en eBay (search_keyword, sin atarla a un carro) para tantear
   el mercado general de esa pieza.
+- **Entradas por semana** (3 sep): vista `entradas_semanales` (yard, semana,
+  carros, exacto) agrupando `yard_date` por semana, últimos 180 días. Panel
+  desplegable arriba de la pestaña "📍 Yarda" (`entradasHTML` en main.js);
+  respeta el selector Todas/Harry's/EZ. Muestra promedio de las últimas 8
+  semanas completas, barras de las últimas 10 y marca en naranja la semana en
+  curso. Ritmo actual: Harry's ~269 carros/semana, EZ ~62. OJO con el
+  histórico: `exacto=false` (se pinta con "≥") en las semanas anteriores a
+  nuestra primera lectura del inventario, porque de esas solo vemos los carros
+  que TODAVÍA siguen en la yarda — subestima. De la semana del 24 ago en
+  adelante el conteo es real.
 - **Bilingüe ES/EN** (31 ago): selector ES|EN en el encabezado, se recuerda
   en localStorage y arranca según el idioma del teléfono. Los textos viven
   en `web/src/i18n.js` con el español como clave; los nombres de pieza en
