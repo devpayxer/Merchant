@@ -83,7 +83,8 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 - Inventario EN VIVO de DOS yardas, cron `yard-sync-3h`:
   1. Harry's U-Pull It (Hazle Township): scrapeado de wegotused.com vía el
      proxy `/api/yard` en Pages (Sucuri bloquea IPs de Supabase; el proxy
-     vive en `web/public/_worker.js`). Con VINs.
+     vive en `web/public/_worker.js`). Con VINs. **MODO LIGERO desde el
+     3 sep 2026** (ver "Sync de Harry's" abajo): solo 2 lecturas al día.
   2. EZ Pull & Save (New Ringgold, PA, a 40 min, más barata): JSON directo de
      ezpullandsave.com/get_inventory.php (2,012 carros, fila y fecha, SIN
      VINs — id sintético EZ-<hash>). $2 entrada, CASH ONLY. Su lista de
@@ -279,6 +280,52 @@ Prerrequisitos: cuenta de vendedor activa + OAuth de usuario (botón
 ebay-radar.pages.dev + endpoint de marketplace account deletion),
 políticas de negocio configuradas (Account API), y que los límites de
 cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
+
+### Sync de Harry's — modo ligero (3 sep 2026, decisión del usuario)
+
+- **Qué pasó:** desde el 1 sep el inventario de Harry's dejó de
+  actualizarse. Dos causas: (a) bug en cascada en yard-sync — un `throw`
+  por una página fallida abortaba la corrida entera antes de guardar
+  cursor, EZ Pull y refresh (cursor clavado en la pág. 80; EZ también se
+  congeló). CORREGIDO: Harry's aislado en try/catch, cursor siempre se
+  guarda, timeout de 12 s por página. (b) Sucuri (WAF de wegotused.com)
+  empezó a tratar al robot distinto que al navegador del usuario: el
+  proxy de Pages recibe `504 error code: 504` (o cuelga), y desde
+  Supabase directo devuelve `307` a un desafío JS
+  (`sucuri_cloudproxy_js`). En el navegador la web funciona normal y sin
+  captcha. NO está caída. Hipótesis: el volumen (40 páginas cada 3 h ≈
+  320 requests/día, más la cabeza de 10 páginas que agregué el 3 sep)
+  disparó la mitigación de bots. NO construir un resolvedor del desafío
+  JS (evasión de WAF; descartado).
+- **Decisión del usuario (textual):** "es solo actualizar la primera
+  página, quizás 2, ellos no actualizan seguido, quizás una vez al día."
+- **Implementado en yard-sync:** Harry's se lee SOLO a las 15 y 21 UTC
+  (11 am y 5 pm de PA; `HARRYS_HOURS_UTC`), el cron sigue cada 3 h para
+  EZ Pull. Cabeza: página 0 y se sigue a la 1, 2... solo si la anterior
+  trajo carros nuevos (tope 4; la yarda lista del más nuevo al más viejo,
+  15 por página, entran ~40/día). Barrido rotativo de 3 páginas por
+  corrida (`SWEEP_PAGES_PER_RUN`, poner 0 para apagarlo) para detectar
+  carros idos: ~190 páginas ⇒ una vuelta cada ~30 días; al cerrar la
+  vuelta se marca `left_at` a lo no visto desde `sweep_started_at`, solo
+  si ninguna página falló en la vuelta. Sin reintentos, 2 s entre
+  páginas. Total ≈ 10 requests/día (antes ≈ 320). Forzar a mano:
+  `POST yard-sync {"harrys":true}`; diagnóstico: `{"mode":"raw","page":0,
+  "debug":true}` (vía proxy) o `"target":"direct"`.
+- **Trade-off aceptado:** un carro que se va tarda hasta ~30 días en
+  desaparecer de la app (antes ~1.5 días). Los `vivos` por vehículo (y
+  por tanto los carriles de rastreo) pueden ir algo inflados. Si el
+  usuario quiere detectar salidas más rápido, subir `SWEEP_PAGES_PER_RUN`
+  con cuidado (cada +3 páginas/corrida = +6 requests/día).
+- **Estado al cerrar el 3 sep 04:30 UTC:** el bloqueo aún NO había
+  cedido (una sola request de prueba vía proxy colgó 50 s). Esperar a que
+  baje la reputación del origen con el nuevo volumen; revisar en
+  `yard_sync_state.harrys_run_at` y en la respuesta del cron
+  (`net._http_response`) si `falladas` vuelve a 0 y `rows` > 0. Si en
+  3-4 días sigue bloqueado, el plan B es que el proxy corra en otro
+  origen (p. ej. un Worker aparte con otra IP de salida) o pedirle al
+  usuario que abra la página desde su teléfono en la app (lectura
+  cliente, sin robot). El sandbox de Claude NO alcanza wegotused.com ni
+  pages.dev; probar siempre a través de la función.
 
 ### Otras notas operativas
 
