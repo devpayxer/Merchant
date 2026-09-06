@@ -314,7 +314,7 @@ async function scrapePage(page: number, now: string) {
     console.error(`pagina ${page} intento ${intento}: ${r?.status ?? "sin respuesta"}`);
     if (intento < FETCH_TRIES) await new Promise((r2) => setTimeout(r2, RETRY_MS * intento));
   }
-  if (!res) return { ok: false, vistos: 0, nuevos: 0, total: null as number | null, fin: false };
+  if (!res) return { ok: false, util: false, vistos: 0, nuevos: 0, total: null as number | null, fin: false };
 
   const html = await res.text();
   const m = html.match(/Showing (\d+) to (\d+) of (\d+)/);
@@ -359,7 +359,14 @@ async function scrapePage(page: number, now: string) {
 
   // ¿Se acabó el inventario? -> el barrido dio la vuelta
   const fin = !m || batch.length === 0 || (total !== null && Number(m[2]) >= total);
-  return { ok: true, vistos: batch.length, nuevos, total, fin };
+  // "util" = la página se pudo LEER de verdad (trae el "Showing N to M of T"
+  // y al menos una fila). Sin esto un 200 con el HTML equivocado — el
+  // desafío de Sucuri, una página de error, un cambio de plantilla — se
+  // confundía con "ya no hay más carros" y la corrida terminaba en silencio
+  // dando por bueno que no había novedades. Así se perdieron los 59 carros
+  // del 4 sep hasta el 6.
+  const util = !!m && batch.length > 0;
+  return { ok: true, util, vistos: batch.length, nuevos, total, fin };
 }
 
 Deno.serve(async (req) => {
@@ -424,7 +431,7 @@ Deno.serve(async (req) => {
     }
     const { data: state, error: e0 } = await supabase
       .from("yard_sync_state")
-      .select("next_page, sweep_started_at, sweep_falladas")
+      .select("next_page, sweep_started_at, sweep_falladas, harrys_pendiente")
       .eq("id", 1)
       .single();
     if (e0) throw e0;
@@ -438,10 +445,13 @@ Deno.serve(async (req) => {
     let sweepFalladas: number = state.sweep_falladas ?? 0;
     const now = new Date().toISOString();
 
-    // ¿Toca leer Harry's en esta corrida?
+    // ¿Toca leer Harry's en esta corrida? En sus horas fijas, o antes si la
+    // lectura anterior falló: con solo 2 lecturas al día, tragarse un fallo
+    // en silencio nos cuesta días de carros nuevos.
     const hora = new Date().getUTCHours();
+    const pendiente = state.harrys_pendiente === true;
     const leerHarrys = body?.harrys === true ||
-      (body?.harrys !== false && HARRYS_HOURS_UTC.includes(hora));
+      (body?.harrys !== false && (HARRYS_HOURS_UTC.includes(hora) || pendiente));
 
     // Harry's va aislado: si truena, EZ Pull y el refresh de matches
     // igual corren (antes un 403 tumbaba TODA la corrida y dejaba el
@@ -459,6 +469,14 @@ Deno.serve(async (req) => {
           const r = await scrapePage(p, now);
           cabeza++;
           if (!r.ok) { falladas++; break; } // bloqueados: no insistir
+          // La página 0 SIEMPRE trae carros; si viene ilegible, algo está
+          // mal del lado de la yarda y hay que reintentar, no darla por
+          // buena. (Las siguientes sí pueden venir vacías si se acabó.)
+          if (p === 0 && !r.util) {
+            falladas++;
+            harrysError = "página 0 ilegible (¿desafío del WAF o cambió la plantilla?)";
+            break;
+          }
           rows += r.vistos;
           nuevosArriba += r.nuevos;
           if (r.total !== null) total = r.total;
@@ -537,13 +555,15 @@ Deno.serve(async (req) => {
         last_run_at: now,
         sweep_started_at: sweepStartedAt,
         sweep_falladas: sweepFalladas,
-        ...(leerHarrys ? { harrys_run_at: now } : {}),
+        ...(leerHarrys
+          ? { harrys_run_at: now, harrys_pendiente: falladas > 0 || !!harrysError }
+          : {}),
       })
       .eq("id", 1);
     if (e3) throw e3;
 
     return new Response(
-      JSON.stringify({ harrys: leerHarrys, rows, nuevosArriba, cabeza, barridas, next_page: page, total, wrapped, idos, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
+      JSON.stringify({ harrys: leerHarrys, reintento: pendiente, rows, nuevosArriba, cabeza, barridas, next_page: page, total, wrapped, idos, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {

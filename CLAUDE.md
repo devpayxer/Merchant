@@ -359,6 +359,25 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   Conclusión: **no hay nada que arreglar de nuestro lado**; hay que
   esperar a que el sitio de la yarda vuelva. Antes de volver a tocar
   código, confirmar con el usuario si la página le carga en el navegador.
+- **Fallo silencioso corregido (6 sep 2026):** Harry's publicó 59 carros
+  con fecha 4 sep y NO entraron solos; se detectaron hasta el 6 sep al
+  forzar la lectura a mano. Evidencia: tras la corrida del 5 sep 21:00
+  UTC, `yard_sync_state.total_records` quedó en NULL (en una corrida sana
+  vale ~2,900), o sea la página 0 llegó ILEGIBLE. `scrapePage` daba
+  `fin = true` cuando no encontraba el "Showing N to M of T" ni filas, así
+  que la cabeza cortaba y la corrida terminaba sin error, sin `falladas` y
+  sin avisar: un 200 con el HTML equivocado (desafío del WAF, página de
+  error, cambio de plantilla) se confundía con "ya no hay más carros".
+  NOTA: no está confirmado que esos carros ya estuvieran publicados el
+  5 sep — la yarda pudo subirlos el 6; lo que sí es seguro es que la
+  lectura del 5 vino mala y no nos enteramos.
+  Correcciones: (a) `scrapePage` ahora devuelve `util` (= parseó el
+  "Showing" Y trajo ≥1 fila) y la página 0 ilegible cuenta como fallo con
+  `harrysError`, no como fin de inventario; (b) columna
+  `yard_sync_state.harrys_pendiente` — si la lectura falla se marca y la
+  SIGUIENTE corrida del cron (3 h) reintenta sin esperar a
+  `HARRYS_HOURS_UTC`, porque con solo 2 lecturas al día tragarse un fallo
+  cuesta hasta 12 h de carros nuevos; (c) la respuesta trae `reintento`.
 - **Cómo verificar cuando vuelva:** `POST yard-sync {"harrys":true}` y
   mirar `falladas` (debe ser 0) y `rows` (> 0); o revisar
   `yard_sync_state.harrys_run_at` y las respuestas del cron en
