@@ -130,6 +130,15 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   resultados y se llama en el render completo y en el parcial. REGLA: si
   agregas otra pantalla con buscador, sigue este patrón; nunca llames
   `render()` desde un evento `input`.
+- **Piezas fijadas arriba** (6 sep): `PIEZAS_FIJADAS` en `web/src/main.js`
+  sube ciertas piezas al principio de la lista de CADA vehículo (Buscar y el
+  carro expandido en Yarda), sin importar la ganancia, y las marca con 📌.
+  Hoy: `["Rin"]` — por petición del dueño, es lo que más le interesa. Se
+  compara por PREFIJO contra `part_types.name_es` (la clave en español), así
+  que funciona igual con la app en inglés y sobrevive si algún día partimos
+  el rin en aluminio / acero / camión. `conFijadasArriba()` reordena lo que
+  devuelve `loadHotList` conservando el orden por ganancia dentro de cada
+  grupo. NO afecta la pestaña Top ni la Lista de precios.
 - **Bilingüe ES/EN** (31 ago): selector ES|EN en el encabezado, se recuerda
   en localStorage y arranca según el idioma del teléfono. Los textos viven
   en `web/src/i18n.js` con el español como clave; los nombres de pieza en

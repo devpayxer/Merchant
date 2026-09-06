@@ -69,6 +69,7 @@ export const STRINGS = {
   "📍 En la yarda: {n} de {total} carros del radar":
     "📍 In the yard: {n} of {total} radar cars",
   "Fila {n}": "Row {n}",
+  "Fijada arriba": "Pinned to the top",
 
   // Entradas por semana
   "~{n} carros por semana": "~{n} cars per week",

@@ -140,6 +140,24 @@ async function loadUpdatedAt() {
   state.updatedAt = data?.[0]?.last_checked_at ?? null;
 }
 
+// Piezas que el dueño quiere ver SIEMPRE hasta arriba de la lista de cada
+// vehículo, sin importar la ganancia. Se comparan contra part_types.name_es
+// (la clave en español), así que funciona igual con la app en inglés.
+// Prefijo, no nombre exacto: si algún día partimos el rin en aluminio /
+// acero / camión, los tres siguen quedando arriba.
+const PIEZAS_FIJADAS = ["Rin"];
+
+function esFijada(pieza) {
+  return PIEZAS_FIJADAS.some((f) => (pieza ?? "").startsWith(f));
+}
+
+// Sube las piezas fijadas al principio conservando el orden que ya traían
+// (la base las manda ordenadas por ganancia neta).
+function conFijadasArriba(rows) {
+  if (!rows) return rows;
+  return [...rows.filter((r) => esFijada(r.pieza)), ...rows.filter((r) => !esFijada(r.pieza))];
+}
+
 async function loadHotList(label) {
   const { data, error } = await db
     .from("hot_list")
@@ -148,7 +166,7 @@ async function loadHotList(label) {
     .order("ganancia_neta", { ascending: false, nullsFirst: false })
     .order("score", { ascending: false });
   if (error) throw error;
-  state.lists[label] = data;
+  state.lists[label] = conFijadasArriba(data);
 }
 
 async function loadYardCars() {
@@ -451,7 +469,7 @@ function rowHTML(r, showVehiculo = false, car = null) {
     <div class="row">
       ${r.foto ? `<img class="thumb" src="${r.foto}" loading="lazy" alt="">` : ""}
       <div class="rowbody">
-        <div class="pieza">${partName(r.pieza)}${showVehiculo ? ` <span class="meta">· ${r.vehiculo}</span>` : ""}</div>
+        <div class="pieza">${esFijada(r.pieza) ? '<span class="pin" title="' + t("Fijada arriba") + '">📌</span> ' : ""}${partName(r.pieza)}${showVehiculo ? ` <span class="meta">· ${r.vehiculo}</span>` : ""}</div>
         <div class="meta">
           <span class="sem ${semClass(r.semaforo)}">${t(r.semaforo ?? "")}</span>
           · ${t("{n} vendidos/30d", { n: r.vendidos_30d ?? 0 })}
