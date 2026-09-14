@@ -377,8 +377,16 @@ async function guardarPaginaHtml(html: string, now: string) {
   return { util, vistos: batch.length, nuevos, total, fin };
 }
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+};
+
 Deno.serve(async (req) => {
   const started = Date.now();
+  // Preflight del navegador (el modo ingest se dispara desde wegotused.com)
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   try {
     // Modo "solo decodificar" para backfill: POST {"mode":"decode","limit":500}
     const body = await req.json().catch(() => ({}));
@@ -439,7 +447,7 @@ Deno.serve(async (req) => {
     if (body?.mode === "ingest") {
       const esperado = Deno.env.get("YARD_INGEST_KEY");
       if (!esperado || body.key !== esperado) {
-        return new Response(JSON.stringify({ error: "clave incorrecta" }), { status: 401 });
+        return new Response(JSON.stringify({ error: "clave incorrecta" }), { status: 401, headers: CORS });
       }
       const pages = Array.isArray(body.pages) ? body.pages : [];
       const now = new Date().toISOString();
@@ -468,7 +476,7 @@ Deno.serve(async (req) => {
       }
       return new Response(
         JSON.stringify({ ok: legibles > 0, paginas: pages.length, legibles, ilegibles, rows, nuevos, total, decoded, ms: Date.now() - started }),
-        { headers: { "Content-Type": "application/json" } },
+        { headers: { "Content-Type": "application/json", ...CORS } },
       );
     }
 

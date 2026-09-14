@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import "./style.css";
 import { translate, translateNote } from "./i18n.js";
+import bookmarkletSrc from "../tools/actualizar-harrys.js?raw";
 
 // La anon key es pública por diseño; RLS solo permite SELECT.
 const SUPABASE_URL = "https://oricrkqewpchixpxcayp.supabase.co";
@@ -36,6 +37,7 @@ const state = {
   filterTop: "",           // filtro en vivo pestaña "Top"
   user: null,              // sesión del dueño (Supabase Auth)
   inv: null,               // filas de my_inventory
+  ingestKey: null,         // clave del marcador "Actualizar Harry's" (solo tras login)
   shipClasses: {},         // pieza -> clase de envío (S/M/L/XL)
   prices: null,            // lista de precios de las yardas (pestaña "Lista")
   filterPrecios: "",       // filtro en vivo pestaña "Lista"
@@ -219,6 +221,13 @@ async function loadInv() {
     .order("created_at", { ascending: false });
   if (error) throw error;
   state.inv = data;
+  // La clave del marcador vive en owner_secrets (RLS: solo el correo del dueño)
+  const { data: sec } = await db
+    .from("owner_secrets")
+    .select("value")
+    .eq("name", "YARD_INGEST_KEY")
+    .maybeSingle();
+  state.ingestKey = sec?.value ?? null;
 }
 
 async function loadTop() {
@@ -943,6 +952,53 @@ function draftHTML(i) {
     </div>`;
 }
 
+// ---------- Actualizar Harry's desde el teléfono (marcador) ----------
+// Ningún servidor pasa el escudo de wegotused.com (Supabase, Cloudflare y
+// GitHub reciben el desafío JS o quedan colgados). El navegador del dueño
+// sí pasa. Este marcador corre EN la página del inventario, baja las
+// primeras páginas desde ahí y se las manda a yard-sync (modo ingest).
+function bookmarkletURL() {
+  if (!state.ingestKey) return null;
+  const code = bookmarkletSrc
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("//"))
+    .join(" ")
+    .replace("__KEY__", state.ingestKey);
+  return "javascript:" + encodeURIComponent(code);
+}
+
+function actualizarHarrysHTML() {
+  const url = bookmarkletURL();
+  return `
+    <section class="vehicle-block">
+      <h2>${t("🔄 Actualizar Harry's desde tu teléfono")}</h2>
+      <div class="rows" style="padding:14px;">
+        <p style="margin-bottom:10px;">${t("El escudo de la página de Harry's bloquea a los servidores, pero a tu teléfono no. Con este marcador, tú le entregas la lista al sistema con un toque.")}</p>
+        ${url
+          ? `<button class="big-btn" data-copia="${encodeURIComponent(url)}">${t("📋 Copiar el código del marcador")}</button>
+             <p class="meta" style="margin:8px 0 12px;">${t("(en computadora también puedes arrastrar este enlace a tu barra de marcadores:")} <a href="${url}" onclick="return false" style="font-weight:800;">Actualizar Harry's</a>)</p>`
+          : `<div class="loading">${t("Cargando…")}</div>`}
+        <details style="margin-top:6px;"><summary style="font-weight:800;cursor:pointer;">${t("Cómo instalarlo (una sola vez)")}</summary>
+          <ol style="padding-left:20px;margin-top:8px;line-height:1.5;">
+            <li>${t("Toca el botón de arriba para copiar el código.")}</li>
+            <li>${t("Guarda CUALQUIER página en tus marcadores (favoritos).")}</li>
+            <li>${t("Edita ese marcador: ponle de nombre “Actualizar Harry's” y en la dirección BORRA todo y PEGA el código.")}</li>
+          </ol>
+          <p style="margin-top:8px;"><b>iPhone:</b> ${t("Marcadores → Editar → toca el marcador → cambia la dirección.")}<br><b>Android:</b> ${t("Menú ⋮ → Marcadores → ⋮ del marcador → Editar.")}</p>
+        </details>
+        <details style="margin-top:6px;"><summary style="font-weight:800;cursor:pointer;">${t("Cómo usarlo (cada vez)")}</summary>
+          <ol style="padding-left:20px;margin-top:8px;line-height:1.5;">
+            <li>${t("Abre en el navegador:")} <b>wegotused.com/our-inventory</b></li>
+            <li>${t("Abre tus marcadores y toca “Actualizar Harry's”. (En Android: escribe “Actualizar” en la barra de direcciones y tócalo.)")}</li>
+            <li>${t("Arriba de la página verás “✅ Harry's al día: N carros nuevos”. Listo.")}</li>
+          </ol>
+          <p class="meta" style="margin-top:8px;">${t("Lee las primeras páginas y se detiene sola cuando ya no hay carros nuevos. Hazlo cuando quieras datos frescos, por ejemplo antes de ir a la yarda.")}</p>
+        </details>
+      </div>
+    </section>`;
+}
+
 function mioHTML() {
   if (!state.user) {
     return `
@@ -1107,7 +1163,7 @@ function render() {
             ? topHTML()
             : state.tab === "precios"
               ? preciosHTML()
-              : mioHTML()
+              : (state.user ? actualizarHarrysHTML() : "") + mioHTML()
     }
     <nav>
       <button class="${state.tab === "yarda" ? "active" : ""}" data-tab="yarda">${t("🚗 Buscar")}</button>

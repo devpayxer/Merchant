@@ -83,8 +83,10 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 - Inventario EN VIVO de DOS yardas, cron `yard-sync-3h`:
   1. Harry's U-Pull It (Hazle Township): scrapeado de wegotused.com vía el
      proxy `/api/yard` en Pages (Sucuri bloquea IPs de Supabase; el proxy
-     vive en `web/public/_worker.js`). Con VINs. **MODO LIGERO desde el
-     3 sep 2026** (ver "Sync de Harry's" abajo): solo 2 lecturas al día.
+     vive en `web/public/_worker.js`). Con VINs. **DESDE EL 14 SEP el
+     relevo está BLOQUEADO por Sucuri y la lectura real la hace el dueño
+     desde su teléfono con el marcador "Actualizar Harry's"** (ver "Sync de
+     Harry's" abajo). El cron solo queda como intento de respaldo.
   2. EZ Pull & Save (New Ringgold, PA, a 40 min, más barata): JSON directo de
      ezpullandsave.com/get_inventory.php (2,012 carros, fila y fecha, SIN
      VINs — id sintético EZ-<hash>). $2 entrada, CASH ONLY. Su lista de
@@ -387,6 +389,38 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   SIGUIENTE corrida del cron (3 h) reintenta sin esperar a
   `HARRYS_HOURS_UTC`, porque con solo 2 lecturas al día tragarse un fallo
   cuesta hasta 12 h de carros nuevos; (c) la respuesta trae `reintento`.
+- **14 sep 2026 — VEREDICTO: ningún servidor pasa el escudo.** Desde el
+  6 sep NINGUNA lectura automática de Harry's funcionó (8 días, 0 carros
+  nuevos; `harrys_pendiente=true` y `total_records=NULL` todo el tiempo).
+  Probado ese día: (a) proxy en Cloudflare Pages → cuelga hasta el timeout
+  (tarpit); (b) directo desde Supabase → 307 desafío JS de Sucuri; (c)
+  **GitHub Actions** (sonda `.github/workflows/probe-harrys.yml`, subida a
+  `main` con permiso del dueño) → también 307 desafío JS. Solo pasa un
+  navegador real en conexión residencial (la del dueño). El dueño NO tiene
+  computadora prendida en casa, así que tampoco sirve un script local.
+- **SOLUCIÓN VIGENTE: marcador "Actualizar Harry's" en el teléfono del
+  dueño.** Código legible en `web/tools/actualizar-harrys.js`. Corre ESTANDO
+  en wegotused.com/our-inventory: baja las páginas 0,1,2… desde ahí (misma
+  origen, IP residencial), manda cada una a `yard-sync` en `mode:"ingest"`
+  y se detiene cuando una página trae 0 carros nuevos (tope 10). Muestra un
+  aviso arriba: "✅ Harry's al día: N carros nuevos". Cómo se instala/usa
+  está en la pestaña **Mío** (solo con sesión), sección
+  "🔄 Actualizar Harry's desde tu teléfono", con botón "Copiar el código".
+  - `yard-sync` `mode:"ingest"`: `{mode,key,pages:[{page,html}]}`; valida
+    `key` contra el secret `YARD_INGEST_KEY`, parsea con
+    `guardarPaginaHtml()` (mismo parseo que el lector automático), upserta,
+    decodifica VINs, `refresh_yard_matches`, limpia `harrys_pendiente` y
+    guarda `total_records`. CORS abierto (se llama desde wegotused.com).
+  - La clave NO va en el bundle público: vive en la tabla `owner_secrets`
+    con RLS `auth.jwt()->>'email' = 'a.ledesma@payxer.com'`; la pestaña Mío
+    la lee tras el login y sustituye `__KEY__` en el código del marcador.
+    Si hay que rotarla: `supabase secrets set YARD_INGEST_KEY=...` Y
+    `update owner_secrets set value=... where name='YARD_INGEST_KEY'`.
+  - El cron sigue intentando Harry's a las horas fijas (por si el escudo
+    algún día deja pasar), pero con `harrys_fallos`: UN reintento tras un
+    fallo y luego espera a la siguiente hora fija — no martillar.
+  - Probado con Playwright (14 sep): sección en Mío, clave fuera del bundle,
+    marcador sobre una copia real de la página: 2 envíos y paro correcto.
 - **Cómo verificar cuando vuelva:** `POST yard-sync {"harrys":true}` y
   mirar `falladas` (debe ser 0) y `rows` (> 0); o revisar
   `yard_sync_state.harrys_run_at` y las respuestas del cron en

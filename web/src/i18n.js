@@ -71,6 +71,29 @@ export const STRINGS = {
   "Fila {n}": "Row {n}",
   "Fijada arriba": "Pinned to the top",
 
+  // Actualizar Harry's desde el teléfono (marcador)
+  "🔄 Actualizar Harry's desde tu teléfono": "🔄 Update Harry's from your phone",
+  "El escudo de la página de Harry's bloquea a los servidores, pero a tu teléfono no. Con este marcador, tú le entregas la lista al sistema con un toque.":
+    "Harry's website shield blocks servers, but not your phone. With this bookmark, you hand the list to the system in one tap.",
+  "📋 Copiar el código del marcador": "📋 Copy the bookmark code",
+  "(en computadora también puedes arrastrar este enlace a tu barra de marcadores:":
+    "(on a computer you can also drag this link to your bookmarks bar:",
+  "Cómo instalarlo (una sola vez)": "How to install it (one time)",
+  "Toca el botón de arriba para copiar el código.": "Tap the button above to copy the code.",
+  "Guarda CUALQUIER página en tus marcadores (favoritos).": "Bookmark ANY page.",
+  "Edita ese marcador: ponle de nombre “Actualizar Harry's” y en la dirección BORRA todo y PEGA el código.":
+    "Edit that bookmark: name it “Update Harry's” and in the address DELETE everything and PASTE the code.",
+  "Marcadores → Editar → toca el marcador → cambia la dirección.": "Bookmarks → Edit → tap the bookmark → change the address.",
+  "Menú ⋮ → Marcadores → ⋮ del marcador → Editar.": "Menu ⋮ → Bookmarks → ⋮ on the bookmark → Edit.",
+  "Cómo usarlo (cada vez)": "How to use it (every time)",
+  "Abre en el navegador:": "Open in the browser:",
+  "Abre tus marcadores y toca “Actualizar Harry's”. (En Android: escribe “Actualizar” en la barra de direcciones y tócalo.)":
+    "Open your bookmarks and tap “Update Harry's”. (Android: type “Update” in the address bar and tap it.)",
+  "Arriba de la página verás “✅ Harry's al día: N carros nuevos”. Listo.":
+    "At the top of the page you'll see “✅ Harry's up to date: N new cars”. Done.",
+  "Lee las primeras páginas y se detiene sola cuando ya no hay carros nuevos. Hazlo cuando quieras datos frescos, por ejemplo antes de ir a la yarda.":
+    "It reads the first pages and stops by itself when there are no more new cars. Do it whenever you want fresh data, e.g. before going to the yard.",
+
   // Entradas por semana
   "~{n} carros por semana": "~{n} cars per week",
   "Sin datos de entradas todavía": "No intake data yet",
