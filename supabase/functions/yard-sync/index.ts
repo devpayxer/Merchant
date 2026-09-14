@@ -27,19 +27,27 @@ const BASE = "https://ebay-radar.pages.dev/api/yard?page=";
 // 15 y 21 UTC = 11am y 5pm hora de PA en verano. La yarda sube carros
 // más o menos una vez al día, así que con dos lecturas sobra.
 // Forzar a mano: POST {"harrys":true}; saltar: {"harrys":false}.
-const HARRYS_HOURS_UTC = [15, 21];
+const HARRYS_HOURS_UTC = [15, 21]; // solo para el BARRIDO rotativo (ver abajo)
 // Cabeza: la yarda lista del más nuevo al más viejo (15 carros por
 // página, entran ~40/día). Se lee la página 0 y se sigue a la siguiente
 // SOLO si la anterior trajo carros nuevos. Normalmente: 1-2 páginas.
-const HEAD_PAGES_MAX = 4;
+// 14 sep: el escudo de la yarda es INTERMITENTE por rachas (6 sondas
+// seguidas pasaron 20 min después de que una esperó 60 s en vano). Por
+// eso la cabeza se prueba en CADA corrida del cron (8 chances/día, 1-2
+// requests cada una) y no solo 2 veces al día, y con reintentos. Tras un
+// hueco largo hay carros nuevos MÁS ABAJO que las primeras páginas: la
+// cabeza sigue leyendo mientras cada página traiga carros nuevos, y si se
+// acaba el tiempo guarda en head_resume por dónde iba para continuar en
+// la siguiente corrida (antes reiniciaba en la 0, veía 0 nuevos y paraba).
+const HEAD_PAGES_MAX = 40;
 // Barrido rotativo para detectar los carros que YA NO ESTÁN: pocas
 // páginas por corrida (~190 páginas => una vuelta cada ~30 días).
 // Poner 0 para desactivarlo del todo.
 const SWEEP_PAGES_PER_RUN = 3;
 const TIME_BUDGET_MS = 60_000;  // tope duro de la parte de Harry's
 const FETCH_TIMEOUT_MS = 12_000; // el WAF a veces deja la conexión colgada
-const FETCH_TRIES = 1;    // sin reintentos: si nos bloquean, insistir empeora
-const RETRY_MS = 800;
+const FETCH_TRIES = 3;    // el escudo abre y cierra por rachas: insistir un poco SÍ sirve
+const RETRY_MS = 3_000;
 const DELAY_MS = 2_000;   // pausa entre páginas, ritmo de persona
 // Cuántas páginas pueden fallar en UNA VUELTA completa y aun así marcar
 // como idos los carros no vistos (una página saltada = 15 carros que
@@ -489,7 +497,7 @@ Deno.serve(async (req) => {
     }
     const { data: state, error: e0 } = await supabase
       .from("yard_sync_state")
-      .select("next_page, sweep_started_at, sweep_falladas, harrys_pendiente, harrys_fallos")
+      .select("next_page, sweep_started_at, sweep_falladas, harrys_pendiente, harrys_fallos, head_resume")
       .eq("id", 1)
       .single();
     if (e0) throw e0;
@@ -507,13 +515,15 @@ Deno.serve(async (req) => {
     // lectura anterior falló: con solo 2 lecturas al día, tragarse un fallo
     // en silencio nos cuesta días de carros nuevos.
     const hora = new Date().getUTCHours();
-    // Un solo reintento tras un fallo. Si vuelve a fallar, se espera a la
-    // siguiente hora fija: reintentar cada 3 h contra un escudo que nos
-    // tiene colgados no arregla nada y nos hace ver más como robot.
     const fallos: number = state.harrys_fallos ?? 0;
-    const pendiente = state.harrys_pendiente === true && fallos < 2;
-    const leerHarrys = body?.harrys === true ||
-      (body?.harrys !== false && (HARRYS_HOURS_UTC.includes(hora) || pendiente));
+    const pendiente = state.harrys_pendiente === true;
+    // La CABEZA (carros nuevos) se intenta en TODAS las corridas: 1-2
+    // requests, y así tenemos 8 oportunidades al día de caer en una racha
+    // abierta del escudo. El BARRIDO rotativo (detectar carros idos, 3
+    // páginas) solo a las horas fijas.
+    const leerHarrys = body?.harrys === true || body?.harrys !== false;
+    const hacerBarrido = body?.harrys === true || HARRYS_HOURS_UTC.includes(hora);
+    let headResume: number = state.head_resume ?? 0;
 
     // Harry's va aislado: si truena, EZ Pull y el refresh de matches
     // igual corren (antes un 403 tumbaba TODA la corrida y dejaba el
@@ -525,8 +535,11 @@ Deno.serve(async (req) => {
     let idos = 0;        // carros marcados como idos en esta corrida
     if (leerHarrys) {
       try {
-        // ---- 1) CABEZA: página 0 y, solo si trajo carros nuevos, la 1... ----
-        for (let p = 0; p < HEAD_PAGES_MAX; p++) {
+        // ---- 1) CABEZA: desde head_resume (normalmente 0) y sigue mientras
+        // cada página traiga carros nuevos ----
+        let headTermino = false;
+        let p = headResume;
+        for (; p < HEAD_PAGES_MAX; p++) {
           if (Date.now() - started > TIME_BUDGET_MS) break;
           const r = await scrapePage(p, now);
           cabeza++;
@@ -542,14 +555,18 @@ Deno.serve(async (req) => {
           rows += r.vistos;
           nuevosArriba += r.nuevos;
           if (r.total !== null) total = r.total;
-          if (r.fin || r.nuevos === 0) break;
+          if (r.fin || r.nuevos === 0) { headTermino = true; break; }
           await new Promise((r2) => setTimeout(r2, DELAY_MS));
         }
+        // Si terminó de verdad (página sin nuevos) la próxima arranca en 0;
+        // si la cortó el tiempo, continúa en la siguiente página. Si falló
+        // la página, se reintenta esa misma en la próxima corrida.
+        headResume = headTermino || p >= HEAD_PAGES_MAX ? 0 : p;
 
         // ---- 2) BARRIDO ROTATIVO (pocas páginas por corrida) ----
         // La cabeza sola nunca vería los carros que YA NO ESTÁN; para eso
         // se da la vuelta al inventario despacio, página por página.
-        if (falladas === 0 && SWEEP_PAGES_PER_RUN > 0) {
+        if (hacerBarrido && falladas === 0 && headTermino && SWEEP_PAGES_PER_RUN > 0) {
           if (page === 0 || !sweepStartedAt) { sweepStartedAt = now; sweepFalladas = 0; }
           for (let i = 0; i < SWEEP_PAGES_PER_RUN; i++) {
             if (Date.now() - started > TIME_BUDGET_MS) break;
@@ -622,6 +639,7 @@ Deno.serve(async (req) => {
               harrys_run_at: now,
               harrys_pendiente: falladas > 0 || !!harrysError,
               harrys_fallos: falladas > 0 || !!harrysError ? fallos + 1 : 0,
+              head_resume: headResume,
             }
           : {}),
       })
@@ -629,7 +647,7 @@ Deno.serve(async (req) => {
     if (e3) throw e3;
 
     return new Response(
-      JSON.stringify({ harrys: leerHarrys, reintento: pendiente, rows, nuevosArriba, cabeza, barridas, next_page: page, total, wrapped, idos, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
+      JSON.stringify({ harrys: leerHarrys, barrido: hacerBarrido, reintento: pendiente, head_resume: headResume, rows, nuevosArriba, cabeza, barridas, next_page: page, total, wrapped, idos, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {
