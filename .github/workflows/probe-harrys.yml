@@ -1,0 +1,26 @@
+# Sonda: ¿Sucuri deja pasar a los runners de GitHub Actions?
+# El relevo en Cloudflare Pages quedó bloqueado (tarpit/504) desde el 6 sep.
+# Esto solo lee la página 0 del inventario público y reporta qué contestó.
+name: probe-harrys
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: leer pagina 0 con cabeceras de navegador
+        run: |
+          URL='https://wegotused.com/our-inventory/?inv%5Byard%5D=HAZLE%20TOWNSHIP&inv%5Bpage%5D=0'
+          code=$(curl -sS -o /tmp/p0.html -w '%{http_code}' -m 40 -L \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' \
+            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
+            -H 'Accept-Language: en-US,en;q=0.9' \
+            "$URL" || echo "curl-fail")
+          echo "HTTP=$code"
+          echo "BYTES=$(wc -c < /tmp/p0.html)"
+          echo "SHOWING=$(grep -o 'Showing [0-9]* to [0-9]* of [0-9]*' /tmp/p0.html | head -1)"
+          echo "FILAS=$(grep -c 'HAZLE TOWNSHIP</td>' /tmp/p0.html)"
+          echo "SUCURI=$(grep -c 'sucuri_cloudproxy' /tmp/p0.html)"
+          echo "--- primeros 300 bytes ---"
+          head -c 300 /tmp/p0.html; echo
