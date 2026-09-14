@@ -398,7 +398,28 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   `main` con permiso del dueño) → también 307 desafío JS. Solo pasa un
   navegador real en conexión residencial (la del dueño). El dueño NO tiene
   computadora prendida en casa, así que tampoco sirve un script local.
-- **SOLUCIÓN VIGENTE: marcador "Actualizar Harry's" en el teléfono del
+- **CORRECCIÓN del mismo día (14 sep, 22:30 UTC) — el escudo NO está
+  cerrado: es INTERMITENTE por rachas.** El dueño señaló, con razón, que
+  cuando pedía actualizar a mano sí entraban carros. Veinte minutos después
+  de que una sonda esperara 60 s en vano, SEIS sondas seguidas por el proxy
+  pasaron con la página completa (200, 122 KB), y una lectura forzada trajo
+  60 carros nuevos. Lo que fallaba era el DISEÑO del automático: UN intento
+  de 12 s, 2 veces al día → casi nunca caía en racha abierta. A mano
+  "funcionaba" porque se insistía hasta pegar en racha abierta.
+  Rediseño (commit del 14 sep, pendiente de deploy al escribir esto):
+  (a) la CABEZA se intenta en TODAS las corridas del cron (8 chances/día,
+  1-2 requests cada una) — el "2 veces al día" ya no aplica a la cabeza,
+  solo al barrido rotativo; (b) `FETCH_TRIES=3` con 3 s de pausa;
+  (c) `head_resume` en `yard_sync_state`: tras un hueco largo los carros
+  nuevos están en muchas páginas, la cabeza sigue mientras cada página
+  traiga nuevos y, si el tiempo la corta, la siguiente corrida continúa en
+  esa página (antes reiniciaba en la 0, veía 0 nuevos y paraba — así el
+  tope de 4 páginas dejó carros sin recuperar el 14 sep). El sweep solo
+  corre a las horas fijas y solo si la cabeza terminó limpia.
+  El veredicto "ningún servidor pasa" de arriba queda matizado: GitHub y
+  Supabase directo SÍ reciben siempre el desafío JS; el proxy de Cloudflare
+  pasa por rachas. El marcador del teléfono queda como respaldo garantizado.
+- **SOLUCIÓN DE RESPALDO: marcador "Actualizar Harry's" en el teléfono del
   dueño.** Código legible en `web/tools/actualizar-harrys.js`. Corre ESTANDO
   en wegotused.com/our-inventory: baja las páginas 0,1,2… desde ahí (misma
   origen, IP residencial), manda cada una a `yard-sync` en `mode:"ingest"`
