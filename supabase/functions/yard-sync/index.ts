@@ -317,6 +317,14 @@ async function scrapePage(page: number, now: string) {
   if (!res) return { ok: false, util: false, vistos: 0, nuevos: 0, total: null as number | null, fin: false };
 
   const html = await res.text();
+  const r = await guardarPaginaHtml(html, now);
+  return { ok: true, ...r };
+}
+
+// Parsea el HTML de UNA página del inventario y la guarda. Lo usan tanto
+// el lector automático (scrapePage) como el modo "ingest", donde el HTML
+// llega desde la computadora del dueño.
+async function guardarPaginaHtml(html: string, now: string) {
   const m = html.match(/Showing (\d+) to (\d+) of (\d+)/);
   const total = m ? Number(m[3]) : null;
 
@@ -366,7 +374,7 @@ async function scrapePage(page: number, now: string) {
   // dando por bueno que no había novedades. Así se perdieron los 59 carros
   // del 4 sep hasta el 6.
   const util = !!m && batch.length > 0;
-  return { ok: true, util, vistos: batch.length, nuevos, total, fin };
+  return { util, vistos: batch.length, nuevos, total, fin };
 }
 
 Deno.serve(async (req) => {
@@ -422,6 +430,48 @@ Deno.serve(async (req) => {
       );
     }
 
+    // MODO INGEST (14 sep 2026): el relevo en Cloudflare quedó bloqueado por
+    // el escudo de la yarda, pero la conexión de casa del dueño carga la
+    // página sin problema. Un script en su computadora baja la(s) primera(s)
+    // página(s) y las manda aquí tal cual; nosotros las parseamos igual que
+    // siempre. Protegido con YARD_INGEST_KEY (secret de Supabase).
+    // POST {"mode":"ingest","key":"...","pages":[{"page":0,"html":"..."}]}
+    if (body?.mode === "ingest") {
+      const esperado = Deno.env.get("YARD_INGEST_KEY");
+      if (!esperado || body.key !== esperado) {
+        return new Response(JSON.stringify({ error: "clave incorrecta" }), { status: 401 });
+      }
+      const pages = Array.isArray(body.pages) ? body.pages : [];
+      const now = new Date().toISOString();
+      let rows = 0, nuevos = 0, ilegibles = 0;
+      let total: number | null = null;
+      for (const pg of pages) {
+        if (typeof pg?.html !== "string" || pg.html.length < 500) { ilegibles++; continue; }
+        const r = await guardarPaginaHtml(pg.html, now);
+        if (!r.util) { ilegibles++; continue; }
+        rows += r.vistos;
+        nuevos += r.nuevos;
+        if (r.total !== null) total = r.total;
+      }
+      const legibles = pages.length - ilegibles;
+      let decoded = 0;
+      try { decoded = await decodeVins(100); } catch (e) { console.error("decode VINs:", e); }
+      if (legibles > 0) {
+        const { error: e2 } = await supabase.rpc("refresh_yard_matches");
+        if (e2) throw e2;
+        await supabase.from("yard_sync_state").update({
+          harrys_run_at: now,
+          harrys_pendiente: false,
+          harrys_fallos: 0,
+          ...(total !== null ? { total_records: total } : {}),
+        }).eq("id", 1);
+      }
+      return new Response(
+        JSON.stringify({ ok: legibles > 0, paginas: pages.length, legibles, ilegibles, rows, nuevos, total, decoded, ms: Date.now() - started }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     if (body?.mode === "decode") {
       const decoded = await decodeVins(Math.min(Number(body.limit) || 500, 1000));
       return new Response(
@@ -431,7 +481,7 @@ Deno.serve(async (req) => {
     }
     const { data: state, error: e0 } = await supabase
       .from("yard_sync_state")
-      .select("next_page, sweep_started_at, sweep_falladas, harrys_pendiente")
+      .select("next_page, sweep_started_at, sweep_falladas, harrys_pendiente, harrys_fallos")
       .eq("id", 1)
       .single();
     if (e0) throw e0;
@@ -449,7 +499,11 @@ Deno.serve(async (req) => {
     // lectura anterior falló: con solo 2 lecturas al día, tragarse un fallo
     // en silencio nos cuesta días de carros nuevos.
     const hora = new Date().getUTCHours();
-    const pendiente = state.harrys_pendiente === true;
+    // Un solo reintento tras un fallo. Si vuelve a fallar, se espera a la
+    // siguiente hora fija: reintentar cada 3 h contra un escudo que nos
+    // tiene colgados no arregla nada y nos hace ver más como robot.
+    const fallos: number = state.harrys_fallos ?? 0;
+    const pendiente = state.harrys_pendiente === true && fallos < 2;
     const leerHarrys = body?.harrys === true ||
       (body?.harrys !== false && (HARRYS_HOURS_UTC.includes(hora) || pendiente));
 
@@ -556,7 +610,11 @@ Deno.serve(async (req) => {
         sweep_started_at: sweepStartedAt,
         sweep_falladas: sweepFalladas,
         ...(leerHarrys
-          ? { harrys_run_at: now, harrys_pendiente: falladas > 0 || !!harrysError }
+          ? {
+              harrys_run_at: now,
+              harrys_pendiente: falladas > 0 || !!harrysError,
+              harrys_fallos: falladas > 0 || !!harrysError ? fallos + 1 : 0,
+            }
           : {}),
       })
       .eq("id", 1);
