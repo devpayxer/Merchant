@@ -406,7 +406,13 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   60 carros nuevos. Lo que fallaba era el DISEÑO del automático: UN intento
   de 12 s, 2 veces al día → casi nunca caía en racha abierta. A mano
   "funcionaba" porque se insistía hasta pegar en racha abierta.
-  Rediseño (commit del 14 sep, pendiente de deploy al escribir esto):
+  Rediseño DESPLEGADO el 14 sep 23:20 UTC (función + web). Puesta al día
+  hecha esa noche con el escudo abierto: entraron 59 (4 sep) + 52 (10 sep)
+  + 8 (11 sep) carros; la cabeza paró sola en una página sin nuevos. El
+  modo ingest se probó contra producción con la página guardada del 29 ago
+  (ok, 15 filas; clave mala → 401). OJO: esa prueba re-tocó `last_seen` de
+  15 carros viejos y dejó `total_records` en 2889 por un rato (la siguiente
+  lectura real lo corrige).
   (a) la CABEZA se intenta en TODAS las corridas del cron (8 chances/día,
   1-2 requests cada una) — el "2 veces al día" ya no aplica a la cabeza,
   solo al barrido rotativo; (b) `FETCH_TRIES=3` con 3 s de pausa;
