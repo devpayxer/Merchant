@@ -45,7 +45,10 @@ const HEAD_PAGES_MAX = 40;
 // Poner 0 para desactivarlo del todo.
 const SWEEP_PAGES_PER_RUN = 3;
 const TIME_BUDGET_MS = 60_000;  // tope duro de la parte de Harry's
-const FETCH_TIMEOUT_MS = 12_000; // el WAF a veces deja la conexión colgada
+// 22 sep: sonda en el minuto :00 → la primera request tardó 12.1 s (justo el
+// límite viejo de 12 s) y las siguientes <1 s. Margen amplio; el cron ya no
+// corre en :00 de todos modos.
+const FETCH_TIMEOUT_MS = 30_000;
 const FETCH_TRIES = 3;    // el escudo abre y cierra por rachas: insistir un poco SÍ sirve
 const RETRY_MS = 3_000;
 const DELAY_MS = 2_000;   // pausa entre páginas, ritmo de persona
