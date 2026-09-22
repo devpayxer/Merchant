@@ -187,9 +187,11 @@ Deno.serve(async (req) => {
         });
       }
       const q = typeof body.q === "string" && body.q ? body.q : "wheel rim OEM";
+      // category opcional: el compatibility_filter solo funciona en categorías
+      // hoja (p. ej. 43953 = Car & Truck Wheels), no en la 6028 general
       const params = new URLSearchParams({
         q,
-        category_ids: PARTS_CATEGORY,
+        category_ids: typeof body.category === "string" && body.category ? body.category : PARTS_CATEGORY,
         filter: `conditions:{USED},itemLocationCountry:US,price:[${MIN_PRICE}..],priceCurrency:USD,buyingOptions:{FIXED_PRICE}`,
         limit: String(Math.min(Number(body.limit) || 10, 50)),
       });
