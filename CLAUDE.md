@@ -516,6 +516,21 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
     fallo y luego espera a la siguiente hora fija — no martillar.
   - Probado con Playwright (14 sep): sección en Mío, clave fuera del bundle,
     marcador sobre una copia real de la página: 2 envíos y paro correcto.
+- **22 sep 2026 — HALLAZGO: los fallos del automático eran del MINUTO :00,
+  no del escudo.** 41 fallos seguidos (`harrys_fallos`) del 14 al 22 sep,
+  pero ese día 9 sondas/lecturas manuales (a minutos sueltos) pasaron
+  TODAS en <1 s. Diferencias: (1) `net._http_response` mostraba
+  `timed_out=true` en todas las corridas del cron — pg_net corta a los
+  5,000 ms por defecto y la función tarda 20-60 s (la función sigue
+  corriendo, pero nunca quedaba registro de su respuesta); (2) TODAS las
+  corridas automáticas caían en el minuto :00, y sitios WordPress+Sucuri
+  suelen ir lentos/cortar justo al cambio de hora. Cambios: crons movidos
+  fuera del :00 (`yard-sync-3h` → `17 */3 * * *`, `ebay-sync-hourly` →
+  `23 * * * *`) con `timeout_milliseconds := 150000`. Dato: Harry's NO
+  agregó carros del 11 al 22 sep (total 2843 sin cambio), así que esa
+  semana no se perdió nada, pero el automático sí estaba roto. VERIFICAR
+  en los días siguientes que `harrys_fallos` se quede en 0 y que
+  `net._http_response` traiga `status_code=200` con el JSON de la función.
 - **Cómo verificar cuando vuelva:** `POST yard-sync {"harrys":true}` y
   mirar `falladas` (debe ser 0) y `rows` (> 0); o revisar
   `yard_sync_state.harrys_run_at` y las respuestas del cron en

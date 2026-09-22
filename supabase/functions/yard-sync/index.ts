@@ -435,11 +435,21 @@ Deno.serve(async (req) => {
         signal: AbortSignal.timeout(Number(body.timeout) || 55_000),
       }).catch((e) => ({ status: 0, err: String(e) } as unknown as Response));
       const txt = typeof (r as Response).text === "function" ? await (r as Response).text() : "";
+      // "find": cuántas veces aparece un texto y un trozo alrededor de la
+      // primera aparición (para ver si cambió la plantilla de la tabla)
+      const find = typeof body.find === "string" && body.find ? body.find : null;
+      const idx = find ? txt.indexOf(find) : -1;
       return new Response(
         JSON.stringify({
           url,
           status: r.status,
           err: (r as unknown as { err?: string }).err ?? null,
+          bytes: txt.length,
+          find,
+          veces: find ? txt.split(find).length - 1 : null,
+          showing: (txt.match(/Showing (\d+) to (\d+) of (\d+)/) ?? [null])[0],
+          filasRegex: [...txt.matchAll(ROW_RE)].length,
+          alrededor: idx >= 0 ? txt.slice(Math.max(0, idx - 200), idx + 900) : null,
           snippet: txt.slice(0, 700),
         }),
         { headers: { "Content-Type": "application/json" } },
