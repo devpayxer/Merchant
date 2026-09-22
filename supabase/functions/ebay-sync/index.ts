@@ -23,8 +23,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 //   3 = <= 2 carros vivos: SIN rastreo hasta que el Growth Check suba el
 //       límite (la app igual muestra precios de yarda y el link de vendidos)
 // 135 + 15 = 150 llamadas/corrida × 24 ≈ 3,600/día, bajo el límite de 5,000.
-const BATCH_FAST = 135;
-const BATCH_SLOW = 15;
+// 22 sep 2026 — RINES PRIMERO (decisión del dueño): carril 1 = ~680 rines
+// con carro vivo, carril 2 = ~49 rines sin carro, carril 3 = las otras 72
+// piezas estacionadas. 30 × 24 = 720/día => cada rin se refresca a diario;
+// ~840 llamadas/día en total, queda presupuesto para "Espiar mercado".
+const BATCH_FAST = 30;
+const BATCH_SLOW = 5;
 const RESULTS_PER_COMBO = 50;    // listados por consulta
 // No visto en N días => vendido/terminado. Cada umbral supera el ciclo de
 // su carril para tolerar un barrido fallido sin falsos "vendidos".
@@ -82,27 +86,18 @@ async function searchCombo(token: string, combo: Combo) {
     "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
   };
 
-  // Intento 1: fitment estructurado
-  const withFitment = new URLSearchParams({
-    q: p.search_keyword,
+  // Búsqueda por keyword plano: "2015 Infiniti Q50 wheel rim OEM". El
+  // compatibility_filter devuelve 400 ("category does not support fitment")
+  // tanto en 6028 como en 43953 (comprobado 22 sep), así que intentarlo
+  // primero solo desperdiciaba una llamada por combo.
+  const plain = new URLSearchParams({
+    q: `${midYear} ${v.make} ${v.model} ${p.search_keyword}`,
     category_ids: category,
     filter: baseFilter,
-    compatibility_filter: `Year:${midYear};Make:${v.make};Model:${v.model}`,
     limit: String(RESULTS_PER_COMBO),
   });
-  let res = await fetch(`${EBAY_SEARCH_URL}?${withFitment}`, { headers });
-
-  // Fallback: keyword plano "2014 Honda Civic left headlight OEM"
-  if (!res.ok) {
-    const plain = new URLSearchParams({
-      q: `${midYear} ${v.make} ${v.model} ${p.search_keyword}`,
-      category_ids: category,
-      filter: baseFilter,
-      limit: String(RESULTS_PER_COMBO),
-    });
-    res = await fetch(`${EBAY_SEARCH_URL}?${plain}`, { headers });
-  }
-  if (!res.ok) throw new Error(`search ${combo.id}: ${res.status}`);
+  const res = await fetch(`${EBAY_SEARCH_URL}?${plain}`, { headers });
+  if (!res.ok) throw new Error(`search ${combo.id}: ${res.status} ${(await res.text()).slice(0, 200)}`);
 
   const data = await res.json();
   return (data.itemSummaries ?? []) as Array<{
@@ -242,6 +237,7 @@ Deno.serve(async (req) => {
     const combos = [...(fast.data ?? []), ...(slow.data ?? [])];
 
     let ok = 0, failed = 0;
+    let primerError: string | null = null;
     for (const combo of combos as unknown as Combo[]) {
       try {
         const items = await searchCombo(token, combo);
@@ -254,17 +250,23 @@ Deno.serve(async (req) => {
       } catch (err) {
         console.error(`combo ${combo.id}:`, err);
         failed++;
+        if (!primerError) primerError = `combo ${combo.id}: ${err instanceof Error ? err.message : JSON.stringify(err)}`;
       }
       // Suave con el rate limit
       await new Promise((r) => setTimeout(r, 250));
     }
 
     return new Response(
-      JSON.stringify({ ok, failed, ms: Date.now() - started }),
+      JSON.stringify({ ok, failed, primerError, ms: Date.now() - started }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error(err);
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+    // Los errores de PostgREST son objetos planos: String() los deja en
+    // "[object Object]". Se devuelve el detalle completo para diagnosticar.
+    const detail = err instanceof Error
+      ? err.message
+      : JSON.stringify(err);
+    return new Response(JSON.stringify({ error: detail }), { status: 500 });
   }
 });

@@ -176,7 +176,40 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   de developer para dividir carga (viola políticas de eBay; riesgo de baneo).
 - Tiempo de manejo en listados: 2 días hábiles.
 
-### Pendiente 1 — Al llegar las llaves de eBay (⚠️ registro RECHAZADO, apelación en curso)
+### ✅ eBay ACTIVO desde el 22 sep 2026 — RADAR SOLO DE RINES
+
+- Cuenta developer aprobada (usuario `payxer`); keyset Production
+  `ebay-radar`. Las llaves daban `invalid_client` hasta que el dueño marcó
+  la EXENCIÓN de Marketplace Account Deletion ("I do not persist eBay
+  data") en Alerts & Notifications — sin eso el keyset queda "Non
+  Compliant" y eBay rechaza el token. Secrets `EBAY_CLIENT_ID` /
+  `EBAY_CLIENT_SECRET` puestos; copia local en el scratchpad de la sesión.
+- **Decisión del dueño (22 sep): el radar de eBay se concentra en RINES.**
+  `refresh_yard_matches()` ahora asigna: carril 1 = rines con ≥1 carro vivo
+  (~680), carril 2 = rines sin carro (~49), carril 3 = las otras 72 piezas
+  ESTACIONADAS (no borradas; para reactivarlas, volver a la regla por
+  número de carros vivos en esa función). `part_types.ebay_category_id` del
+  rin = 43953 (Car & Truck Wheels).
+- `ebay-sync`: BATCH_FAST=30, BATCH_SLOW=5 → cada rin se refresca a
+  DIARIO con ~840 llamadas/día (sobran >4,000 para "Espiar mercado").
+  Búsqueda por keyword plano ("2015 Infiniti Q50 wheel rim OEM"): el
+  `compatibility_filter` devuelve 400 en 6028 y en 43953, así que se quitó
+  el intento (desperdiciaba 1 llamada por combo). Modo sonda:
+  `POST {"mode":"probe","q":"...","limit":5,"category":"43953"}`.
+  Errores ahora legibles (`primerError` en la respuesta).
+- Cron `ebay-sync-hourly` (`0 * * * *`) programado. Primera corrida real
+  22 sep: 35 combos, 1,704 listados, 321 vendedores, 0 fallos.
+- `hot_list` ya da `precio_objetivo` para rines (medianas $150-250 en los
+  modelos buenos). `vendidos_30d` arranca en 0: necesita días para ver
+  listados desaparecer (ENDED_AFTER_DAYS_FAST=4). `competencia` satura en
+  50 = RESULTS_PER_COMBO; mejora pendiente: guardar el `total` que
+  devuelve la Browse API por combo.
+- MEJORAS PENDIENTES del carril de rines: (1) filtrar juegos de 4 / pares /
+  llantas / tapones de las métricas (inflan la mediana); (2) números
+  Hollander por vehículo para títulos y comparaciones exactas; (3) "Espiar
+  mercado" con getItem (watchers, sold qty) — ver diseño abajo.
+
+### Pendiente 1 (histórico) — Registro de developer (⚠️ fue RECHAZADO, apelación exitosa el 22 sep)
 
 ESTADO 31 ago 2026: el registro del Developers Program (a.ledesma@payxer.com)
 fue RECHAZADO ("problems with the data provided or other irregularities")
