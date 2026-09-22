@@ -169,9 +169,56 @@ async function persist(
 }
 
 // ---------- Handler ----------
-Deno.serve(async () => {
+Deno.serve(async (req) => {
   const started = Date.now();
   try {
+    const body = await req.json().catch(() => ({}));
+
+    // SONDA (22 sep 2026, al llegar las llaves): 1 token + 1 búsqueda, sin
+    // guardar nada. Para comprobar credenciales y ver qué devuelve eBay.
+    // POST {"mode":"probe","q":"...","year":2015,"make":"Infiniti","model":"Q50"}
+    if (body?.mode === "probe") {
+      let token: string;
+      try {
+        token = await getEbayToken();
+      } catch (e) {
+        return new Response(JSON.stringify({ tokenOk: false, error: String(e) }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }
+      const q = typeof body.q === "string" && body.q ? body.q : "wheel rim OEM";
+      const params = new URLSearchParams({
+        q,
+        category_ids: PARTS_CATEGORY,
+        filter: `conditions:{USED},itemLocationCountry:US,price:[${MIN_PRICE}..],priceCurrency:USD,buyingOptions:{FIXED_PRICE}`,
+        limit: String(Math.min(Number(body.limit) || 10, 50)),
+      });
+      if (body.year && body.make && body.model) {
+        params.set("compatibility_filter", `Year:${body.year};Make:${body.make};Model:${body.model}`);
+      }
+      const r = await fetch(`${EBAY_SEARCH_URL}?${params}`, {
+        headers: { Authorization: `Bearer ${token}`, "X-EBAY-C-MARKETPLACE-ID": "EBAY_US" },
+      });
+      const txt = await r.text();
+      let data: Record<string, unknown> = {};
+      try { data = JSON.parse(txt); } catch { /* texto plano */ }
+      const items = ((data.itemSummaries as Array<Record<string, unknown>>) ?? []).map((i) => ({
+        title: i.title,
+        price: (i.price as { value?: string })?.value,
+        seller: (i.seller as { username?: string })?.username,
+        condition: i.condition,
+        url: i.itemWebUrl,
+      }));
+      return new Response(
+        JSON.stringify({
+          tokenOk: true, status: r.status, q, total: data.total ?? null,
+          warnings: data.warnings ?? data.errors ?? null,
+          items, raw: r.ok ? undefined : txt.slice(0, 500), ms: Date.now() - started,
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     const token = await getEbayToken();
 
     // Un lote por carril: el rápido no puede matar de hambre al lento
