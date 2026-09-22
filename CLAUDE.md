@@ -174,6 +174,17 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   del último precio de los listados terminados en 30 d) se llena sola con
   el tiempo y responde "¿la gente compra lo más barato?".
   (Regla anterior, sustituida: 10-15% bajo la mediana.)
+- **Envío incluido (regla del dueño, 22 sep): "si no ofrece free shipping
+  hay que sumarle el shipping".** `listings.shipping` = envío más barato
+  que informa eBay (0 = gratis; null = no lo dijo → se asume el costo de
+  la clase de envío de la pieza: S 6 / M 13 / L 22). ebay-sync manda
+  `X-EBAY-C-ENDUSERCTX: contextualLocation=country=US,zip=18201` (zip de
+  Harry's) para que Browse devuelva `shippingOptions` con monto. TODOS los
+  `precio_*` de combo_stats/hot_list son PUESTOS EN CASA (precio + envío).
+  La app muestra "eBay desde $144 (envío $35) · típico $257". Dato real
+  del 22 sep: de 1,656 listados con envío conocido, 1,254 son gratis y los
+  que cobran promedian $48 — sin esto el "más barato" engañaba. Ejemplo:
+  BMW 3 Series, $109 + $35 envío = $144 → sugerido $137, ganancia EZ $66.
 - **Carriles de rastreo** (re-balanceados 2 sep con la cobertura total;
   sustituyen al ENDED_AFTER_DAYS=5 global): tracked_combos.priority lo
   recalcula refresh_yard_matches() cada 3h con el inventario vivo.

@@ -84,6 +84,10 @@ async function searchCombo(token: string, combo: Combo) {
   const headers = {
     Authorization: `Bearer ${token}`,
     "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    // Ubicación del comprador (zip de la yarda): así eBay informa el envío
+    // en shippingOptions, incluido el "calculado". Regla del dueño 22 sep:
+    // la competencia se compara con el envío sumado.
+    "X-EBAY-C-ENDUSERCTX": "contextualLocation=country=US,zip=18201",
   };
 
   // Búsqueda por keyword plano: "2015 Infiniti Q50 wheel rim OEM". El
@@ -109,7 +113,16 @@ async function searchCombo(token: string, combo: Combo) {
     price?: { value?: string };
     image?: { imageUrl?: string };
     thumbnailImages?: Array<{ imageUrl?: string }>;
+    shippingOptions?: Array<{ shippingCost?: { value?: string } }>;
   }>;
+}
+
+// Envío más barato que informa el listado (0 = gratis); null si no lo dice
+function envioDe(i: { shippingOptions?: Array<{ shippingCost?: { value?: string } }> }): number | null {
+  const costos = (i.shippingOptions ?? [])
+    .map((o) => Number(o.shippingCost?.value))
+    .filter((n) => Number.isFinite(n));
+  return costos.length ? Math.min(...costos) : null;
 }
 
 // ---------- Persistencia ----------
@@ -129,6 +142,7 @@ async function persist(
       condition: i.condition ?? null,
       seller: i.seller?.username ?? null,
       image_url: i.image?.imageUrl ?? i.thumbnailImages?.[0]?.imageUrl ?? null,
+      shipping: envioDe(i),
       last_seen: now,
       ended_at: null, // si reapareció, lo revivimos
     }));
@@ -193,8 +207,14 @@ Deno.serve(async (req) => {
       if (body.year && body.make && body.model) {
         params.set("compatibility_filter", `Year:${body.year};Make:${body.make};Model:${body.model}`);
       }
+      // Con el contexto de ubicación del comprador (código postal de la
+      // yarda) eBay resuelve también el envío "calculado" en shippingOptions.
       const r = await fetch(`${EBAY_SEARCH_URL}?${params}`, {
-        headers: { Authorization: `Bearer ${token}`, "X-EBAY-C-MARKETPLACE-ID": "EBAY_US" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+          "X-EBAY-C-ENDUSERCTX": "contextualLocation=country=US,zip=18201",
+        },
       });
       const txt = await r.text();
       let data: Record<string, unknown> = {};
@@ -205,6 +225,7 @@ Deno.serve(async (req) => {
         seller: (i.seller as { username?: string })?.username,
         condition: i.condition,
         url: i.itemWebUrl,
+        envio: i.shippingOptions,
       }));
       return new Response(
         JSON.stringify({

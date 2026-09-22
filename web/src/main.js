@@ -458,8 +458,13 @@ function rowHTML(r, showVehiculo = false, car = null) {
   let precios = "";
   // Competencia real: el piso (3er más barato limpio) manda; la mediana es
   // solo referencia de hasta dónde puede llegar. Regla del dueño (22 sep).
+  // Todos los precios de eBay van PUESTOS EN CASA (precio + envío): así
+  // compara el comprador. Se enseña el envío del competidor real.
+  const envio = r.envio_mas_barato == null ? t("envío est.")
+    : Number(r.envio_mas_barato) === 0 ? t("envío gratis")
+    : t("envío {n}", { n: money(r.envio_mas_barato) });
   const pEbay = r.precio_piso != null
-    ? ` → <span class="ebay">eBay ${t("desde")} ${money(r.precio_piso)}</span>${r.precio_tipico != null && Number(r.precio_tipico) !== Number(r.precio_piso) ? ` <span class="tipico">· ${t("típico")} ${money(r.precio_tipico)}</span>` : ""}`
+    ? ` → <span class="ebay">eBay ${t("desde")} ${money(r.precio_piso)}</span> <span class="tipico">(${envio})${r.precio_tipico != null && Number(r.precio_tipico) !== Number(r.precio_piso) ? ` · ${t("típico")} ${money(r.precio_tipico)}` : ""}</span>`
     : r.precio_objetivo != null ? ` → <span class="ebay">eBay ${money(r.precio_objetivo)}</span>` : "";
   if (comparando && harrys.costo != null && ez.costo != null) {
     precios = `<div class="precios"><span class="yarda">Harry's ${money(Math.round(harrys.costo))}</span> · <span class="yarda">EZ ${money(Math.round(ez.costo))}</span>${pEbay}</div>`;

@@ -75,6 +75,9 @@ export const STRINGS = {
   "desde": "from",
   "típico": "typical",
   "ver el más barato ↗": "see the cheapest ↗",
+  "envío gratis": "free shipping",
+  "envío {n}": "shipping {n}",
+  "envío est.": "est. shipping",
 
   // Actualizar Harry's desde el teléfono (marcador)
   "🔄 Actualizar Harry's desde tu teléfono": "🔄 Update Harry's from your phone",
