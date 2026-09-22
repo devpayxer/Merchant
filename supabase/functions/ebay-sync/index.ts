@@ -216,6 +216,42 @@ Deno.serve(async (req) => {
       );
     }
 
+    // SONDA de la Marketplace Insights API (vendidos de los últimos 90 días).
+    // Es de "limited release": eBay la habilita solo a apps aprobadas. Si el
+    // token con ese scope falla o la búsqueda da 403, no la tenemos.
+    // POST {"mode":"insights","q":"2015 Infiniti Q50 wheel rim OEM"}
+    if (body?.mode === "insights") {
+      const creds = btoa(`${Deno.env.get("EBAY_CLIENT_ID")}:${Deno.env.get("EBAY_CLIENT_SECRET")}`);
+      const tr = await fetch(EBAY_TOKEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${creds}` },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          scope: "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/buy.marketplace.insights",
+        }),
+      });
+      const ttxt = await tr.text();
+      if (!tr.ok) {
+        return new Response(JSON.stringify({ insights: false, paso: "token", status: tr.status, detalle: ttxt.slice(0, 300) }), { headers: { "Content-Type": "application/json" } });
+      }
+      const tok = JSON.parse(ttxt).access_token;
+      const q = typeof body.q === "string" && body.q ? body.q : "wheel rim OEM";
+      const desde = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 19) + "Z";
+      const params = new URLSearchParams({
+        q, category_ids: "43953", limit: "10",
+        filter: `lastSoldDate:[${desde}..],conditions:{USED},itemLocationCountry:US`,
+      });
+      const r = await fetch(`https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search?${params}`, {
+        headers: { Authorization: `Bearer ${tok}`, "X-EBAY-C-MARKETPLACE-ID": "EBAY_US" },
+      });
+      const txt = await r.text();
+      let data: Record<string, unknown> = {}; try { data = JSON.parse(txt); } catch { /* */ }
+      const ventas = ((data.itemSales as Array<Record<string, unknown>>) ?? []).map((i) => ({
+        title: i.title, precio: (i.lastSoldPrice as { value?: string })?.value, fecha: i.lastSoldDate, vendedor: (i.seller as { username?: string })?.username,
+      }));
+      return new Response(JSON.stringify({ insights: r.ok, paso: "busqueda", status: r.status, total: data.total ?? null, ventas, detalle: r.ok ? undefined : txt.slice(0, 400) }), { headers: { "Content-Type": "application/json" } });
+    }
+
     const token = await getEbayToken();
 
     // Un lote por carril: el rápido no puede matar de hambre al lento
