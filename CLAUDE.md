@@ -160,7 +160,20 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   además $2 de entrada POR VISITA (no se prorratea por pieza). XL = solo
   recogida local, no listar (excepción 31 ago: el rin SUELTO pasó a L,
   listable con envío ~$22; el set de 4 sigue siendo trato local).
-- Precio de publicación sugerido: 10-15% bajo la mediana.
+- **Precio de publicación (regla del dueño, 22 sep 2026): "la competencia
+  es el más barato, no el promedio".** `hot_list.precio_piso` = el 3er
+  listado activo más barato LIMPIO (sin juegos/llantas/tapones ni títulos
+  de otro carro; si hay <3 limpios se usan todos; nunca supera a la
+  mediana). `precio_sugerido = piso × 0.95` (entrar justo debajo del
+  competidor real) y la GANANCIA se calcula sobre ese precio. La mediana
+  queda como `precio_tipico` (referencia). `url_mas_barato` /
+  `vendedor_mas_barato` apuntan al listado del piso. La app muestra
+  "eBay desde $piso · típico $mediana" y el link "ver el más barato ↗".
+  Ejemplo real: BMW 3 Series 2006-2011 — mín $75 (era un 5 Series), piso
+  $109, típico $247 → ganancia EZ $38, no $160. `precio_vendido` (mediana
+  del último precio de los listados terminados en 30 d) se llena sola con
+  el tiempo y responde "¿la gente compra lo más barato?".
+  (Regla anterior, sustituida: 10-15% bajo la mediana.)
 - **Carriles de rastreo** (re-balanceados 2 sep con la cobertura total;
   sustituyen al ENDED_AFTER_DAYS=5 global): tracked_combos.priority lo
   recalcula refresh_yard_matches() cada 3h con el inventario vivo.

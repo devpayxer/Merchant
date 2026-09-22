@@ -71,6 +71,11 @@ export const STRINGS = {
   "Fila {n}": "Row {n}",
   "Fijada arriba": "Pinned to the top",
 
+  // Competencia real (piso) vs precio típico
+  "desde": "from",
+  "típico": "typical",
+  "ver el más barato ↗": "see the cheapest ↗",
+
   // Actualizar Harry's desde el teléfono (marcador)
   "🔄 Actualizar Harry's desde tu teléfono": "🔄 Update Harry's from your phone",
   "El escudo de la página de Harry's bloquea a los servidores, pero a tu teléfono no. Con este marcador, tú le entregas la lista al sistema con un toque.":

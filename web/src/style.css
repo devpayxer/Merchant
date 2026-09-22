@@ -267,6 +267,7 @@ nav button.active {
 /* Precios yarda vs eBay + ganancia neta */
 .precios { font-size: 15px; font-weight: 700; margin-top: 3px; }
 .precios .yarda { color: var(--amber); }
+.precios .tipico { font-weight: 600; color: var(--ink-soft); }
 .precios .ebay { color: var(--accent); }
 .gan { text-align: right; flex: none; }
 .gan-num { font-size: 26px; font-weight: 800; color: var(--green); white-space: nowrap; }

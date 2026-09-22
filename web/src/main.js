@@ -410,9 +410,12 @@ function rowHTML(r, showVehiculo = false, car = null) {
   const soldLink = r.keyword
     ? ` · <a href="${soldUrl(r)}" target="_blank" rel="noopener">${t("💰 vendidos ↗")}</a>`
     : "";
-  const link = r.ebay_url
-    ? ` · <a href="${r.ebay_url}" target="_blank" rel="noopener">${t("ver en eBay ↗")}</a>`
-    : "";
+  // Link al competidor real (el listado más barato limpio); si no hay, al más reciente
+  const link = r.url_mas_barato
+    ? ` · <a href="${r.url_mas_barato}" target="_blank" rel="noopener">${t("ver el más barato ↗")}</a>`
+    : r.ebay_url
+      ? ` · <a href="${r.ebay_url}" target="_blank" rel="noopener">${t("ver en eBay ↗")}</a>`
+      : "";
   let pullBtn = "";
   if (state.user) {
     const key = `${r.vehiculo}|${r.pieza}|${car?.vin ?? ""}`;
@@ -427,7 +430,7 @@ function rowHTML(r, showVehiculo = false, car = null) {
         key,
         vehiculo: r.vehiculo,
         pieza: r.pieza,
-        precio: r.precio_objetivo ?? null,
+        precio: r.precio_sugerido ?? r.precio_objetivo ?? null, // entra justo debajo del competidor real
         costo: Number.isFinite(costoPull) ? costoPull : null,
         vin: car?.vin ?? null,
         fila: car?.row_number ?? null,
@@ -453,7 +456,11 @@ function rowHTML(r, showVehiculo = false, car = null) {
 
   // Línea de precios: en modo comparar muestra ambas yardas
   let precios = "";
-  const pEbay = r.precio_objetivo != null ? ` → <span class="ebay">eBay ${money(r.precio_objetivo)}</span>` : "";
+  // Competencia real: el piso (3er más barato limpio) manda; la mediana es
+  // solo referencia de hasta dónde puede llegar. Regla del dueño (22 sep).
+  const pEbay = r.precio_piso != null
+    ? ` → <span class="ebay">eBay ${t("desde")} ${money(r.precio_piso)}</span>${r.precio_tipico != null && Number(r.precio_tipico) !== Number(r.precio_piso) ? ` <span class="tipico">· ${t("típico")} ${money(r.precio_tipico)}</span>` : ""}`
+    : r.precio_objetivo != null ? ` → <span class="ebay">eBay ${money(r.precio_objetivo)}</span>` : "";
   if (comparando && harrys.costo != null && ez.costo != null) {
     precios = `<div class="precios"><span class="yarda">Harry's ${money(Math.round(harrys.costo))}</span> · <span class="yarda">EZ ${money(Math.round(ez.costo))}</span>${pEbay}</div>`;
   } else if (sel.costo != null) {
