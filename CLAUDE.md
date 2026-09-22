@@ -204,6 +204,17 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
   listados desaparecer (ENDED_AFTER_DAYS_FAST=4). `competencia` satura en
   50 = RESULTS_PER_COMBO; mejora pendiente: guardar el `total` que
   devuelve la Browse API por combo.
+- **VENDIDOS por API — solicitud en curso.** La Browse API no da vendidos.
+  La Marketplace Insights API (item_sales/search, últimos 90 días) sí,
+  pero es "limited release": sonda `POST ebay-sync {"mode":"insights"}`
+  → `invalid_scope` (no concedida). Solicitud enviada el 22 sep 2026 por
+  Application Growth Check, **ticket 260922-000065** (respuesta prometida
+  en 1-2 días hábiles; seguimiento en developer.ebay.com → Support → My
+  Tickets). Si la aprueban: token con scope
+  `https://api.ebay.com/oauth/api_scope/buy.marketplace.insights`, una
+  búsqueda por vehículo/día (~700 llamadas) y `vendidos_30d` pasa a ser
+  dato real en vez de inferido. Mientras tanto el radar infiere vendidos
+  por desaparición de listados (ENDED_AFTER_DAYS).
 - MEJORAS PENDIENTES del carril de rines: (1) filtrar juegos de 4 / pares /
   llantas / tapones de las métricas (inflan la mediana); (2) números
   Hollander por vehículo para títulos y comparaciones exactas; (3) "Espiar
