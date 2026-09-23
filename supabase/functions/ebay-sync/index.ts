@@ -41,10 +41,22 @@ const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const EBAY_SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
 const PARTS_CATEGORY = "6028"; // Car & Truck Parts & Accessories
 
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
+// SB_SERVICE_KEY = la llave service_role del proyecto (JWT, iat 29 ago
+// 2026) guardada como secret propio. La SUPABASE_SERVICE_ROLE_KEY que
+// inyecta la plataforma dio PGRST303 "JWT issued at future" en corridas
+// intermitentes (22-23 sep 2026); ver CLAUDE.md. Se conserva como respaldo.
+const SERVICE_KEY = Deno.env.get("SB_SERVICE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabase = createClient(Deno.env.get("SUPABASE_URL")!, SERVICE_KEY);
+
+// Decodifica las claims públicas de un JWT (iat/exp/role) sin validar.
+// Sirve para el modo "env": diagnosticar qué llave nos inyecta la plataforma.
+function claimsDe(jwt: string | undefined) {
+  try {
+    const p = jwt!.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const c = JSON.parse(atob(p));
+    return { iat: c.iat ? new Date(c.iat * 1000).toISOString() : null, exp: c.exp ? new Date(c.exp * 1000).toISOString() : null, role: c.role ?? null, iss: c.iss ?? null };
+  } catch { return { error: "no es JWT o está vacío", prefijo: jwt?.slice(0, 6) ?? null }; }
+}
 
 // ---------- eBay OAuth (client credentials, dura 2h) ----------
 async function getEbayToken(): Promise<string> {
@@ -186,6 +198,14 @@ Deno.serve(async (req) => {
     // SONDA (22 sep 2026, al llegar las llaves): 1 token + 1 búsqueda, sin
     // guardar nada. Para comprobar credenciales y ver qué devuelve eBay.
     // POST {"mode":"probe","q":"...","year":2015,"make":"Infiniti","model":"Q50"}
+    if (body?.mode === "env") {
+      return new Response(JSON.stringify({
+        ahora: new Date().toISOString(),
+        inyectada: claimsDe(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),
+        propia: claimsDe(Deno.env.get("SB_SERVICE_KEY")),
+        usando: Deno.env.get("SB_SERVICE_KEY") ? "propia" : "inyectada",
+      }), { headers: { "Content-Type": "application/json" } });
+    }
     if (body?.mode === "probe") {
       let token: string;
       try {

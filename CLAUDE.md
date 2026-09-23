@@ -547,16 +547,30 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   `{"mode":"raw","debug":true}` devuelve el JSON de diagnóstico del
   proxy (~500 bytes), NO la página; un "200 con 503 bytes" ahí no es un
   bloqueo, es la sonda mal invocada. Para ver la página usa raw SIN debug.
-- **PGRST303 "JWT issued at future" en ebay-sync (22-23 sep):** el cron
-  de las 23:23 y 00:23 devolvió 500 con ese error desde el cliente
-  supabase-js de la función, mientras yard-sync (recién desplegada)
-  escribía bien. Los secrets automáticos (`SUPABASE_SERVICE_ROLE_KEY`,
-  etc.) se re-emiten en cada deploy; la instancia vieja de ebay-sync se
-  quedó con una llave que PostgREST rechazaba. SOLUCIÓN: redesplegar la
-  función (`supabase functions deploy ebay-sync --no-verify-jwt`); la
-  primera llamada justo después del deploy puede fallar igual (desfase de
-  reloj), la segunda ya funciona. Si vuelve a pasar en cualquier función,
-  redesplegar antes de investigar otra cosa.
+- **PGRST303 "JWT issued at future" — CAUSA RAÍZ y arreglo (23 sep 2026,
+  03:30 UTC).** ebay-sync devolvía 500 con ese error de forma INTERMITENTE
+  (23:23, 00:23, 01:23, 02:23 fallaron; 03:23 pasó; un redeploy "arreglaba"
+  la primera vez y volvía a fallar). Sonda `POST ebay-sync {"mode":"env"}`
+  demostró que la `SUPABASE_SERVICE_ROLE_KEY` que inyecta la plataforma YA
+  NO es el JWT del proyecto sino una llave nueva `sb_secret_...`; el
+  gateway la cambia por un JWT acuñado al momento (iat = ahora) y si el
+  reloj de PostgREST va unos segundos atrás, lo rechaza. ARREGLO: secret
+  propio `SB_SERVICE_KEY` = la llave service_role legacy del proyecto
+  (JWT, iat 29 ago 2026, exp 2036; se obtiene con
+  `GET /v1/projects/<ref>/api-keys?reveal=true` del Management API);
+  ebay-sync y yard-sync usan `SB_SERVICE_KEY ?? SUPABASE_SERVICE_ROLE_KEY`.
+  Verificado: ebay-sync ok:35 y yard-sync falladas:0 con la llave propia.
+  OJO: si algún día se desactivan las "legacy API keys" en el Dashboard,
+  esta llave muere y hay que volver a la inyectada (o generar otro JWT).
+  Nota: los "digest" de `supabase secrets list` NO son sha256 del valor;
+  no sirven para comparar llaves.
+- **Harry's 03:17 UTC del 23 sep: `harrysError: "página 0: 403, 403,
+  403, 403"`** (4 intentos en ~35 s), y 12 min después el proxy respondió
+  la página completa. O sea: ahora el escudo a veces contesta 403 rápido
+  (antes colgaba). `scrapePage` guarda además un trozo del cuerpo del
+  error («Sucuri…», «error code…») en `estado`/`harrysError` para saber
+  QUIÉN bloquea. Si los 403 se repiten varios días a la misma hora, ver
+  el plan B (otro origen de salida) al final de esta sección.
 - **Cómo verificar cuando vuelva:** `POST yard-sync {"harrys":true}` y
   mirar `falladas` (debe ser 0) y `rows` (> 0); o revisar
   `yard_sync_state.harrys_run_at` y las respuestas del cron en

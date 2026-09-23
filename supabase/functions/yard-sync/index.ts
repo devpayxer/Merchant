@@ -60,9 +60,11 @@ const MAX_FALLADAS_PARA_BARRER = 0;
 const ROW_RE =
   /HAZLE TOWNSHIP<\/td>\s*<td[^>]*>(\d{4})<\/td>\s*<td[^>]*>([^<]+)<\/td>\s*<td[^>]*>([^<]+)<\/td>\s*<td[^>]*>([^<]*)<\/td>\s*<td[^>]*>([^<]*)<\/td>\s*<td[^>]*>([^<]*)<\/td>\s*<td[^>]*>([^<]*)<\/td>\s*<td[^>]*>([^<]*)<\/td>/g;
 
+// SB_SERVICE_KEY: llave service_role del proyecto como secret propio; la
+// inyectada por la plataforma dio PGRST303 intermitente (ver CLAUDE.md).
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  Deno.env.get("SB_SERVICE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
 function parseDate(mmddyyyy: string): string | null {
@@ -338,8 +340,13 @@ async function scrapePage(page: number, now: string, deadline: number) {
       // se reintenta, igual que un 504: el escudo va por rachas.
       if (page !== 0 || g.util) return { ok: true, estado: estados.join(", ") || null, ...g };
       estados.push(`200 ilegible (${html.length} b)`);
+    } else if (r) {
+      // Quién bloquea: un trozo del cuerpo sin etiquetas (Sucuri, Cloudflare,
+      // página de error de WordPress...) para no volver a adivinar.
+      const cuerpo = (await r.text().catch(() => "")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 90);
+      estados.push(`${r.status}${cuerpo ? ` «${cuerpo}»` : ""}`);
     } else {
-      estados.push(r ? String(r.status) : "sin respuesta");
+      estados.push("sin respuesta");
     }
     console.error(`pagina ${page} intento ${intento}: ${estados[estados.length - 1]}`);
     if (intento < FETCH_TRIES) await new Promise((r2) => setTimeout(r2, Math.min(RETRY_MS * intento, Math.max(0, deadline - Date.now()))));
