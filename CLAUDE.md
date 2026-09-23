@@ -531,6 +531,32 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   semana no se perdió nada, pero el automático sí estaba roto. VERIFICAR
   en los días siguientes que `harrys_fallos` se quede en 0 y que
   `net._http_response` traiga `status_code=200` con el JSON de la función.
+- **23 sep 2026 (00:17-00:40 UTC) — dos fallos más, ya corregidos.**
+  (1) La corrida del cron de las 00:17 falló en la página 0 con 3
+  respuestas no-OK rápidas y `harrysError: null`: no había forma de saber
+  QUÉ contestó el proxy. Ahora `scrapePage` devuelve `estado` ("504, 504,
+  sin respuesta" / "200 ilegible (503 b)") y la corrida lo pone en
+  `harrysError` (queda en `net._http_response`). Además la página 0 en
+  200 pero ilegible ya se REINTENTA (antes cortaba a la primera), con
+  `FETCH_TRIES=4` y pausas 5/10/15 s. (2) Al probar a mano, una corrida
+  se quedó sin tiempo y MURIÓ sin guardar estado (solo "shutdown" en los
+  logs): 4 intentos × 30 s por página podían pasar de 2 min. Ahora
+  `scrapePage` recibe un `deadline` (= inicio + `TIME_BUDGET_MS`) y no
+  reintenta ni espera más allá. Corrida completa (cabeza + 3 páginas de
+  barrido + EZ) verificada en 15 s con `falladas: 0`. OJO al leer sondas:
+  `{"mode":"raw","debug":true}` devuelve el JSON de diagnóstico del
+  proxy (~500 bytes), NO la página; un "200 con 503 bytes" ahí no es un
+  bloqueo, es la sonda mal invocada. Para ver la página usa raw SIN debug.
+- **PGRST303 "JWT issued at future" en ebay-sync (22-23 sep):** el cron
+  de las 23:23 y 00:23 devolvió 500 con ese error desde el cliente
+  supabase-js de la función, mientras yard-sync (recién desplegada)
+  escribía bien. Los secrets automáticos (`SUPABASE_SERVICE_ROLE_KEY`,
+  etc.) se re-emiten en cada deploy; la instancia vieja de ebay-sync se
+  quedó con una llave que PostgREST rechazaba. SOLUCIÓN: redesplegar la
+  función (`supabase functions deploy ebay-sync --no-verify-jwt`); la
+  primera llamada justo después del deploy puede fallar igual (desfase de
+  reloj), la segunda ya funciona. Si vuelve a pasar en cualquier función,
+  redesplegar antes de investigar otra cosa.
 - **Cómo verificar cuando vuelva:** `POST yard-sync {"harrys":true}` y
   mirar `falladas` (debe ser 0) y `rows` (> 0); o revisar
   `yard_sync_state.harrys_run_at` y las respuestas del cron en

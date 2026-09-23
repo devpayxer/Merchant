@@ -49,8 +49,8 @@ const TIME_BUDGET_MS = 60_000;  // tope duro de la parte de Harry's
 // límite viejo de 12 s) y las siguientes <1 s. Margen amplio; el cron ya no
 // corre en :00 de todos modos.
 const FETCH_TIMEOUT_MS = 30_000;
-const FETCH_TRIES = 3;    // el escudo abre y cierra por rachas: insistir un poco SÍ sirve
-const RETRY_MS = 3_000;
+const FETCH_TRIES = 4;    // el escudo abre y cierra por rachas: insistir un poco SÍ sirve
+const RETRY_MS = 5_000;   // pausas 5, 10, 15 s (RETRY_MS × intento)
 const DELAY_MS = 2_000;   // pausa entre páginas, ritmo de persona
 // Cuántas páginas pueden fallar en UNA VUELTA completa y aun así marcar
 // como idos los carros no vistos (una página saltada = 15 carros que
@@ -293,9 +293,18 @@ async function decodeVins(limit: number): Promise<number> {
 // Baja UNA página del inventario y la guarda. Devuelve cuántos carros
 // trajo y cuántos de esos no teníamos: eso permite parar el barrido de
 // cabeza apenas deja de haber novedades.
-async function scrapePage(page: number, now: string) {
-  let res: Response | null = null;
+// `deadline` (ms epoch) acota los reintentos: sin esto una sola página
+// con 4 intentos × 30 s podía comerse 2 minutos y la función moría por
+// límite de tiempo SIN guardar estado (pasó el 23 sep 00:35 UTC).
+async function scrapePage(page: number, now: string, deadline: number) {
+  // `estados` guarda qué contestó cada intento ("504", "200 ilegible",
+  // "timeout") para que la corrida lo reporte en harrysError: antes un
+  // fallo solo dejaba "falladas: 1" y no había forma de saber POR QUÉ.
+  const estados: string[] = [];
   for (let intento = 1; intento <= FETCH_TRIES; intento++) {
+    const restante = deadline - Date.now();
+    if (restante < 3_000) { estados.push("sin tiempo"); break; }
+    const timeoutMs = Math.min(FETCH_TIMEOUT_MS, restante);
     let url = BASE + page;
     let r = await fetch(url, {
       redirect: "manual",
@@ -304,7 +313,7 @@ async function scrapePage(page: number, now: string) {
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml",
       },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     }).catch(() => null);
     // Sigue hasta 3 redirects conservando query y headers
     for (let hop = 0; hop < 3 && r && r.status >= 300 && r.status < 400; hop++) {
@@ -318,18 +327,24 @@ async function scrapePage(page: number, now: string) {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
           Accept: "text/html,application/xhtml+xml",
         },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       }).catch(() => null);
     }
-    if (r?.ok) { res = r; break; }
-    console.error(`pagina ${page} intento ${intento}: ${r?.status ?? "sin respuesta"}`);
-    if (intento < FETCH_TRIES) await new Promise((r2) => setTimeout(r2, RETRY_MS * intento));
+    if (r?.ok) {
+      const html = await r.text();
+      const g = await guardarPaginaHtml(html, now);
+      // Página 0 en 200 pero sin el "Showing…" ni filas = HTML equivocado
+      // (desafío del WAF, página de error). Cuenta como intento fallido y
+      // se reintenta, igual que un 504: el escudo va por rachas.
+      if (page !== 0 || g.util) return { ok: true, estado: estados.join(", ") || null, ...g };
+      estados.push(`200 ilegible (${html.length} b)`);
+    } else {
+      estados.push(r ? String(r.status) : "sin respuesta");
+    }
+    console.error(`pagina ${page} intento ${intento}: ${estados[estados.length - 1]}`);
+    if (intento < FETCH_TRIES) await new Promise((r2) => setTimeout(r2, Math.min(RETRY_MS * intento, Math.max(0, deadline - Date.now()))));
   }
-  if (!res) return { ok: false, util: false, vistos: 0, nuevos: 0, total: null as number | null, fin: false };
-
-  const html = await res.text();
-  const r = await guardarPaginaHtml(html, now);
-  return { ok: true, ...r };
+  return { ok: false, estado: estados.join(", "), util: false, vistos: 0, nuevos: 0, total: null as number | null, fin: false };
 }
 
 // Parsea el HTML de UNA página del inventario y la guarda. Lo usan tanto
@@ -554,15 +569,13 @@ Deno.serve(async (req) => {
         let p = headResume;
         for (; p < HEAD_PAGES_MAX; p++) {
           if (Date.now() - started > TIME_BUDGET_MS) break;
-          const r = await scrapePage(p, now);
+          const r = await scrapePage(p, now, started + TIME_BUDGET_MS);
           cabeza++;
-          if (!r.ok) { falladas++; break; } // bloqueados: no insistir
-          // La página 0 SIEMPRE trae carros; si viene ilegible, algo está
-          // mal del lado de la yarda y hay que reintentar, no darla por
-          // buena. (Las siguientes sí pueden venir vacías si se acabó.)
-          if (p === 0 && !r.util) {
+          // Bloqueados o página 0 ilegible en todos los intentos: no insistir
+          // más en esta corrida; queda harrys_pendiente y la siguiente reintenta.
+          if (!r.ok) {
             falladas++;
-            harrysError = "página 0 ilegible (¿desafío del WAF o cambió la plantilla?)";
+            harrysError = `página ${p}: ${r.estado}`;
             break;
           }
           rows += r.vistos;
@@ -584,7 +597,7 @@ Deno.serve(async (req) => {
           for (let i = 0; i < SWEEP_PAGES_PER_RUN; i++) {
             if (Date.now() - started > TIME_BUDGET_MS) break;
             await new Promise((r2) => setTimeout(r2, DELAY_MS));
-            const r = await scrapePage(page, now);
+            const r = await scrapePage(page, now, started + TIME_BUDGET_MS);
             barridas++;
             if (!r.ok) { falladas++; sweepFalladas++; page++; break; } // bloqueados: parar
             rows += r.vistos;
