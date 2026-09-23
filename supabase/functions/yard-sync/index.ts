@@ -23,6 +23,11 @@ const EZ_URL = "https://www.ezpullandsave.com/get_inventory.php";
 // través del relevo /api/yard desplegado en el proyecto de Cloudflare Pages
 // (web/public/_worker.js).
 const BASE = "https://ebay-radar.pages.dev/api/yard?page=";
+// Regiones de Supabase desde las que el proxy sale con IP de EE.UU. y
+// Sucuri deja pasar (probado 23 sep 2026: us-* y ap-southeast-1 pasan;
+// ca-central-1, eu-* y sa-east-1 reciben 403 GEO02). La primera es la
+// que se usa para re-enrutar.
+const REGIONES_OK = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"];
 // Horas UTC en las que se lee Harry's (el cron corre a las 0,3,...,21 UTC).
 // 15 y 21 UTC = 11am y 5pm hora de PA en verano. La yarda sube carros
 // más o menos una vez al día, así que con dos lecturas sobra.
@@ -423,6 +428,40 @@ Deno.serve(async (req) => {
   try {
     // Modo "solo decodificar" para backfill: POST {"mode":"decode","limit":500}
     const body = await req.json().catch(() => ({}));
+
+    // ---- Región de ejecución (23 sep 2026) ----
+    // Sucuri bloquea por PAÍS ("Block ID: GEO02 — Access from your Country
+    // was disabled"). El proxy de Pages corre en el colo de Cloudflare más
+    // cercano a quien lo llama, y esta función corre en la región más
+    // cercana a SU llamador: el cron (pg_net, base en ca-central-1) la
+    // ejecutaba en Canadá y el proxy salía con IP canadiense → 403; desde
+    // EE.UU. pasa. El cron ya manda `x-region: us-east-1`; esto es la red
+    // de seguridad: si igual nos toca una región bloqueada, la función se
+    // re-invoca a sí misma en us-east-1 y devuelve esa respuesta.
+    const region = Deno.env.get("SB_REGION") ?? "";
+    const vaALeerHarrys = !body?.mode || body.mode === "raw";
+    if (
+      vaALeerHarrys && region && !REGIONES_OK.includes(region) &&
+      !req.headers.get("x-yard-rerouted") && body?.target !== "direct"
+    ) {
+      // req.url dentro del runtime es una ruta interna que el gateway no
+      // acepta ("requested path is invalid"); se arma la URL pública.
+      const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/yard-sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: req.headers.get("Authorization") ?? "",
+          "x-region": REGIONES_OK[0],
+          "x-yard-rerouted": region,
+        },
+        body: JSON.stringify(body ?? {}),
+        signal: AbortSignal.timeout(140_000),
+      });
+      return new Response(await r.text(), {
+        status: r.status,
+        headers: { "Content-Type": "application/json", "x-yard-rerouted-from": region },
+      });
+    }
     // Sonda de diagnóstico: devuelve el resultado completo de NHTSA para un VIN
     if (body?.mode === "probe" && typeof body.vin === "string") {
       const res = await fetch(
@@ -680,7 +719,7 @@ Deno.serve(async (req) => {
     if (e3) throw e3;
 
     return new Response(
-      JSON.stringify({ harrys: leerHarrys, barrido: hacerBarrido, reintento: pendiente, head_resume: headResume, rows, nuevosArriba, cabeza, barridas, next_page: page, total, wrapped, idos, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
+      JSON.stringify({ region, harrys: leerHarrys, barrido: hacerBarrido, reintento: pendiente, head_resume: headResume, rows, nuevosArriba, cabeza, barridas, next_page: page, total, wrapped, idos, falladas, harrysError, decoded, ez, ms: Date.now() - started }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {

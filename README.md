@@ -49,11 +49,13 @@ En el SQL Editor (requiere extensiones `pg_cron` y `pg_net`, actívalas en Datab
 ```sql
 select cron.schedule(
   'ebay-sync-hourly',
-  '0 * * * *',
+  '23 * * * *',  -- fuera del minuto :00; yard-sync-3h va en '17 */3 * * *'
+  -- x-region: la función debe correr en EE.UU. (Sucuri bloquea a Canadá/Europa por país)
   $$
   select net.http_post(
     url := 'https://TU-PROYECTO.supabase.co/functions/v1/ebay-sync',
-    headers := '{"Authorization": "Bearer TU_ANON_KEY", "Content-Type": "application/json"}'::jsonb
+    headers := '{"Authorization": "Bearer TU_ANON_KEY", "Content-Type": "application/json", "x-region": "us-east-1"}'::jsonb,
+    timeout_milliseconds := 150000
   );
   $$
 );

@@ -83,10 +83,12 @@ Web en producción: https://ebay-radar.pages.dev (Cloudflare Pages, cuenta
 - Inventario EN VIVO de DOS yardas, cron `yard-sync-3h`:
   1. Harry's U-Pull It (Hazle Township): scrapeado de wegotused.com vía el
      proxy `/api/yard` en Pages (Sucuri bloquea IPs de Supabase; el proxy
-     vive en `web/public/_worker.js`). Con VINs. **DESDE EL 14 SEP el
-     relevo está BLOQUEADO por Sucuri y la lectura real la hace el dueño
-     desde su teléfono con el marcador "Actualizar Harry's"** (ver "Sync de
-     Harry's" abajo). El cron solo queda como intento de respaldo.
+     vive en `web/public/_worker.js`). Con VINs. **RESUELTO 23 sep 2026:
+     Sucuri bloquea por PAÍS (GEO02) y el cron corría la función en
+     ca-central-1; ahora el cron manda `x-region: us-east-1` y la función
+     se re-enruta sola si cae en región bloqueada** (ver "Sync de Harry's"
+     abajo, entrada del 23 sep 06:30). El marcador del teléfono queda como
+     respaldo.
   2. EZ Pull & Save (New Ringgold, PA, a 40 min, más barata): JSON directo de
      ezpullandsave.com/get_inventory.php (2,012 carros, fila y fecha, SIN
      VINs — id sintético EZ-<hash>). $2 entrada, CASH ONLY. Su lista de
@@ -571,6 +573,37 @@ cuenta nueva hayan subido (mientras tanto, Fase B con borrador copiable).
   error («Sucuri…», «error code…») en `estado`/`harrysError` para saber
   QUIÉN bloquea. Si los 403 se repiten varios días a la misma hora, ver
   el plan B (otro origen de salida) al final de esta sección.
+- **23 sep 2026 06:30 UTC — CAUSA RAÍZ DEFINITIVA de los fallos del
+  automático: BLOQUEO POR PAÍS, no por hora ni por volumen.** El 403 traía
+  «Block ID: GEO02 — Access from your Country was disabled by the
+  administrator» (Sucuri). Prueba decisiva: la misma corrida disparada por
+  pg_net (camino del cron) daba 403 y, en el mismo minuto, disparada con
+  curl daba 200. Explicación: la Edge Function corre en la región de
+  Supabase más cercana a QUIEN la llama; el cron la llama desde la base
+  (proyecto en **ca-central-1**) → la función corre en Canadá → el proxy
+  de Pages corre en un colo canadiense de Cloudflare → IP de salida
+  canadiense → Harry's solo admite EE.UU. Las lecturas manuales venían del
+  sandbox (us-east-1) y pasaban; el teléfono del dueño, obvio, también.
+  Mapa probado con `x-region` (sonda raw): us-east-1, us-east-2,
+  us-west-1, us-west-2 y ap-southeast-1 → 200; ca-central-1, eu-west-1,
+  eu-west-2, eu-central-1, sa-east-1 → 403 GEO02.
+  ARREGLO (desplegado y verificado con pg_net: `falladas: 0`, 5.8 s):
+  (a) el cron `yard-sync-3h` manda la cabecera `x-region: us-east-1`
+  (cambiado con `cron.alter_job`; el snippet del README ya la incluye);
+  (b) red de seguridad en yard-sync: lee `SB_REGION` y, si no está en
+  `REGIONES_OK` y va a leer Harry's, se re-invoca a sí misma en us-east-1
+  (`x-yard-rerouted`) y devuelve esa respuesta (cabecera
+  `x-yard-rerouted-from`); probado invocándola a la fuerza en
+  ca-central-1 → respondió desde us-east-1 con `falladas: 0`. La
+  respuesta normal ahora trae `region`.
+  Esto explica TODA la historia desde el 1 sep: "timeouts", "504",
+  "tarpit", "minuto :00" y "rachas" eran lecturas parciales del mismo
+  hecho — el cron siempre salía por Canadá. Las hipótesis anteriores de
+  esta sección quedan como historia; no volver a tocar horarios ni
+  reintentos por esto. Si vuelve a fallar, mirar primero `region` en la
+  respuesta y `harrysError` (trae el «Block ID» de Sucuri).
+  NOTA: `net._http_response` se purga a las ~6 h (TTL de pg_net); la
+  evidencia de corridas viejas desaparece sola.
 - **Cómo verificar cuando vuelva:** `POST yard-sync {"harrys":true}` y
   mirar `falladas` (debe ser 0) y `rows` (> 0); o revisar
   `yard_sync_state.harrys_run_at` y las respuestas del cron en
